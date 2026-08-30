@@ -12,9 +12,20 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
-  const subject = await prisma.subject.findUnique({
-    where: { id },
+  const subject = await prisma.subject.findFirst({
+    where: {
+      id,
+      teacherId: teacher.id, // Strictly owner only
+    },
     include: {
       enrollments: {
         orderBy: { studentIdNumber: "asc" },
@@ -31,7 +42,7 @@ export async function GET(
   });
 
   if (!subject) {
-    return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+    return NextResponse.json({ error: "Subject not found or access denied." }, { status: 404 });
   }
 
   return NextResponse.json({ subject });
@@ -46,11 +57,27 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
   const body = await req.json();
   const { title, description } = body;
 
   try {
+    const existing = await prisma.subject.findFirst({
+      where: { id, teacherId: teacher.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Subject not found or unauthorized." }, { status: 404 });
+    }
+
     const updated = await prisma.subject.update({
       where: { id },
       data: {
@@ -75,8 +102,24 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
   try {
+    const existing = await prisma.subject.findFirst({
+      where: { id, teacherId: teacher.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Subject not found or unauthorized." }, { status: 404 });
+    }
+
     await prisma.subject.delete({
       where: { id },
     });

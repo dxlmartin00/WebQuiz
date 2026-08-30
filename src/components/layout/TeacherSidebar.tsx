@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -8,13 +9,29 @@ import {
   BookOpen,
   FileQuestion,
   LogOut,
-  GraduationCap,
-  Sparkles,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 
 export default function TeacherSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
+  const [pendingCount, setPendingCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/teacher/admin/teachers")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.teachers) {
+            const pending = data.teachers.filter((t: any) => !t.isApproved).length;
+            setPendingCount(pending);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isAdmin, pathname]);
 
   const links = [
     {
@@ -43,9 +60,18 @@ export default function TeacherSidebar() {
         </div>
         <div>
           <div className="font-bold tracking-tight text-white flex items-center gap-1.5 text-base">
-            WebQuiz <span className="text-[10px] uppercase font-semibold bg-indigo-900/90 text-indigo-300 px-1.5 py-0.5 border border-indigo-700">Admin</span>
+            WebQuiz{" "}
+            {isAdmin ? (
+              <span className="text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 border border-amber-500/40">
+                Developer
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase font-semibold bg-indigo-900/90 text-indigo-300 px-1.5 py-0.5 border border-indigo-700">
+                Faculty
+              </span>
+            )}
           </div>
-          <div className="text-xs text-slate-400">Faculty Portal</div>
+          <div className="text-xs text-slate-400">Academic Portal</div>
         </div>
       </div>
 
@@ -72,6 +98,33 @@ export default function TeacherSidebar() {
             </Link>
           );
         })}
+
+        {/* Developer Admin Only: Faculty Approvals */}
+        {isAdmin && (
+          <div className="pt-4 mt-4 border-t border-slate-800">
+            <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Administration
+            </div>
+            <Link
+              href="/teacher/admin/teachers"
+              className={`flex items-center justify-between px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                pathname.startsWith("/teacher/admin/teachers")
+                  ? "bg-amber-600 text-white border border-amber-500 font-semibold"
+                  : "text-amber-300/90 hover:bg-slate-800 hover:text-amber-200"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>Faculty Approvals</span>
+              </div>
+              {pendingCount > 0 && (
+                <span className="bg-amber-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded-full">
+                  {pendingCount}
+                </span>
+              )}
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* User Footer */}
@@ -79,10 +132,10 @@ export default function TeacherSidebar() {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold text-white truncate">
-              {session?.user?.name || "Professor"}
+              {session?.user?.name || "Faculty Member"}
             </div>
             <div className="text-[11px] text-slate-400 truncate">
-              {session?.user?.email || "teacher@school.edu"}
+              {session?.user?.email || ""}
             </div>
           </div>
           <button

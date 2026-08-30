@@ -10,13 +10,18 @@ export async function GET() {
   }
 
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase() },
+    where: { email: session.user.email.toLowerCase().trim() },
   });
 
   if (!teacher) {
     return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
   }
 
+  if (!teacher.isApproved) {
+    return NextResponse.json({ error: "Account pending administrator approval" }, { status: 403 });
+  }
+
+  // Multi-tenant isolation: Only fetch classes belonging strictly to THIS teacher
   const subjects = await prisma.subject.findMany({
     where: { teacherId: teacher.id },
     include: {
@@ -40,11 +45,15 @@ export async function POST(req: NextRequest) {
   }
 
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase() },
+    where: { email: session.user.email.toLowerCase().trim() },
   });
 
   if (!teacher) {
     return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
+  }
+
+  if (!teacher.isApproved) {
+    return NextResponse.json({ error: "Account pending administrator approval" }, { status: 403 });
   }
 
   try {
@@ -60,14 +69,19 @@ export async function POST(req: NextRequest) {
 
     const cleanCode = subjectCode.trim().toUpperCase();
 
-    // Check if code exists
+    // Check if code already exists for THIS teacher
     const existing = await prisma.subject.findUnique({
-      where: { subjectCode: cleanCode },
+      where: {
+        teacherId_subjectCode: {
+          teacherId: teacher.id,
+          subjectCode: cleanCode,
+        },
+      },
     });
 
     if (existing) {
       return NextResponse.json(
-        { error: `Subject code '${cleanCode}' already exists.` },
+        { error: `You already have a class with subject code '${cleanCode}'.` },
         { status: 409 }
       );
     }

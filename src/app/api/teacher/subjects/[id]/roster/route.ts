@@ -12,15 +12,31 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id: subjectId } = await params;
+
+  // Strict ownership check
+  const subject = await prisma.subject.findFirst({
+    where: { id: subjectId, teacherId: teacher.id },
+  });
+
+  if (!subject) {
+    return NextResponse.json({ error: "Subject not found or unauthorized" }, { status: 404 });
+  }
+
   const body = await req.json();
 
   try {
-    // Check if body contains single student or bulk list
     const students: { studentIdNumber: string; studentName: string }[] = [];
 
     if (body.students && Array.isArray(body.students)) {
-      // Direct array format
       for (const s of body.students) {
         if (s.studentIdNumber) {
           students.push({
@@ -30,8 +46,6 @@ export async function POST(
         }
       }
     } else if (body.rawCsvText) {
-      // Parse CSV / multiline text format:
-      // Line: STU-1001, Alice Johnson
       const lines = body.rawCsvText.split("\n");
       for (const line of lines) {
         const trimmed = line.trim();
@@ -111,7 +125,25 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id: subjectId } = await params;
+
+  // Strict ownership check
+  const subject = await prisma.subject.findFirst({
+    where: { id: subjectId, teacherId: teacher.id },
+  });
+
+  if (!subject) {
+    return NextResponse.json({ error: "Subject not found or unauthorized" }, { status: 404 });
+  }
+
   const { searchParams } = new URL(req.url);
   const studentIdNumber = searchParams.get("studentIdNumber");
 

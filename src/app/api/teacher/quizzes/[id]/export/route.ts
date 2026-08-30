@@ -14,10 +14,22 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id: quizId } = await params;
 
-  const quiz = await prisma.quiz.findUnique({
-    where: { id: quizId },
+  // Strict ownership check
+  const quiz = await prisma.quiz.findFirst({
+    where: {
+      id: quizId,
+      subject: { teacherId: teacher.id },
+    },
     include: {
       subject: {
         include: {
@@ -44,12 +56,11 @@ export async function GET(
   });
 
   if (!quiz) {
-    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+    return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
   }
 
   const totalQuizPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
 
-  // Map enrolled students
   const submissionMap = new Map();
   for (const s of quiz.submissions) {
     submissionMap.set(s.studentIdNumber, s);
@@ -81,7 +92,6 @@ export async function GET(
     };
   });
 
-  // Collect question breakdown
   const questionBreakdown: any[] = [];
   for (const sub of quiz.submissions) {
     for (let i = 0; i < sub.answers.length; i++) {
@@ -108,7 +118,6 @@ export async function GET(
     }
   }
 
-  // Collect violation logs
   const violations: any[] = [];
   for (const sub of quiz.submissions) {
     for (const v of sub.violationLogs) {

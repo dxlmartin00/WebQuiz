@@ -12,9 +12,20 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
-  const quiz = await prisma.quiz.findUnique({
-    where: { id },
+  const quiz = await prisma.quiz.findFirst({
+    where: {
+      id,
+      subject: { teacherId: teacher.id }, // Strict owner check
+    },
     include: {
       subject: true,
       questions: {
@@ -30,10 +41,9 @@ export async function GET(
   });
 
   if (!quiz) {
-    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+    return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
   }
 
-  // Parse questions options and correctAnswers JSON
   const formattedQuestions = quiz.questions.map((q) => ({
     id: q.id,
     type: q.type,
@@ -64,6 +74,14 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
   const body = await req.json();
   const {
@@ -80,6 +98,14 @@ export async function PUT(
   } = body;
 
   try {
+    const existing = await prisma.quiz.findFirst({
+      where: { id, subject: { teacherId: teacher.id } },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
+    }
+
     await prisma.quiz.update({
       where: { id },
       data: {
@@ -95,9 +121,7 @@ export async function PUT(
       },
     });
 
-    // If questions are provided, update them
     if (questions && Array.isArray(questions)) {
-      // Clean old questions
       await prisma.question.deleteMany({
         where: { quizId: id },
       });
@@ -145,8 +169,24 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   const { id } = await params;
   try {
+    const existing = await prisma.quiz.findFirst({
+      where: { id, subject: { teacherId: teacher.id } },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
+    }
+
     await prisma.quiz.delete({
       where: { id },
     });

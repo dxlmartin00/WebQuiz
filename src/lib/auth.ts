@@ -1,53 +1,16 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "lummartin@nemsu.edu.ph").toLowerCase().trim();
 
 export const authOptions: NextAuthOptions = {
   providers: [
     // Google OAuth 2.0 Provider
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "placeholder-client-id",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "placeholder-client-secret",
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
-    }),
-    // Direct Credentials Provider for Faculty Sign-In & Development
-    CredentialsProvider({
-      id: "teacher-credentials",
-      name: "Teacher Account",
-      credentials: {
-        email: { label: "Email", type: "email", placeholder: "teacher@school.edu" },
-        name: { label: "Full Name", type: "text", placeholder: "Prof. Alan Turing" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email) {
-          return null;
-        }
-
-        const email = credentials.email.toLowerCase().trim();
-        const name = credentials.name?.trim() || "Instructor";
-
-        // Find or create Teacher record in DB
-        let teacher = await prisma.teacher.findUnique({
-          where: { email },
-        });
-
-        if (!teacher) {
-          teacher = await prisma.teacher.create({
-            data: {
-              email,
-              name,
-            },
-          });
-        }
-
-        return {
-          id: teacher.id,
-          name: teacher.name,
-          email: teacher.email,
-          image: teacher.avatar || undefined,
-        };
-      },
     }),
   ],
   callbacks: {
@@ -55,6 +18,8 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === "google" && user.email) {
         try {
           const email = user.email.toLowerCase().trim();
+          const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
+
           const existing = await prisma.teacher.findUnique({
             where: { email },
           });
@@ -63,9 +28,11 @@ export const authOptions: NextAuthOptions = {
             await prisma.teacher.create({
               data: {
                 email,
-                name: user.name || "Teacher",
+                name: user.name || "Faculty Member",
                 googleId: account.providerAccountId,
                 avatar: user.image,
+                role: isAdmin ? "ADMIN" : "TEACHER",
+                isApproved: isAdmin ? true : false, // Admin is auto-approved; other teachers require approval
               },
             });
           } else {
@@ -74,6 +41,8 @@ export const authOptions: NextAuthOptions = {
               data: {
                 googleId: account.providerAccountId,
                 avatar: user.image || existing.avatar,
+                role: isAdmin ? "ADMIN" : existing.role,
+                isApproved: isAdmin ? true : existing.isApproved,
               },
             });
           }
@@ -86,6 +55,8 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && session.user.email) {
         const email = session.user.email.toLowerCase().trim();
+        const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
+
         let teacher = await prisma.teacher.findUnique({
           where: { email },
         });
@@ -94,13 +65,17 @@ export const authOptions: NextAuthOptions = {
           teacher = await prisma.teacher.create({
             data: {
               email,
-              name: session.user.name || "Instructor",
+              name: session.user.name || "Faculty Member",
               avatar: session.user.image,
+              role: isAdmin ? "ADMIN" : "TEACHER",
+              isApproved: isAdmin ? true : false,
             },
           });
         }
 
         session.user.id = teacher.id;
+        session.user.role = teacher.role;
+        session.user.isApproved = teacher.isApproved;
       }
       return session;
     },

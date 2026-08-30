@@ -10,13 +10,14 @@ export async function GET() {
   }
 
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase() },
+    where: { email: session.user.email.toLowerCase().trim() },
   });
 
-  if (!teacher) {
-    return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
+  // Multi-tenant isolation: Only fetch quizzes belonging to classes owned by THIS teacher
   const quizzes = await prisma.quiz.findMany({
     where: {
       subject: {
@@ -97,6 +98,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const teacher = await prisma.teacher.findUnique({
+    where: { email: session.user.email.toLowerCase().trim() },
+  });
+
+  if (!teacher || !teacher.isApproved) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const {
@@ -117,6 +126,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Subject and Title are required" },
         { status: 400 }
+      );
+    }
+
+    // Verify the target subject is owned by THIS teacher
+    const subject = await prisma.subject.findFirst({
+      where: { id: subjectId, teacherId: teacher.id },
+    });
+
+    if (!subject) {
+      return NextResponse.json(
+        { error: "Class not found or unauthorized to create quizzes in this class." },
+        { status: 404 }
       );
     }
 
