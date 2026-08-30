@@ -1,11 +1,11 @@
-// Prisma schema for WebQuiz Application
+// Prisma schema for WebQuiz Application (Production PostgreSQL & Local Development)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
