@@ -148,9 +148,18 @@ export default function StudentQuizOverviewPage({
             <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
               {quiz.title}
             </h1>
-            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              {quiz.description || "No specific instructions provided."}
-            </p>
+            {quiz.description ? (
+              <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 text-xs text-slate-700 whitespace-pre-line leading-relaxed font-sans">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block mb-1">
+                  Instructor Instructions &amp; Policies:
+                </span>
+                {quiz.description}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 mt-2 italic">
+                No custom instructor instructions provided.
+              </p>
+            )}
           </div>
 
           {/* Test Specs Grid */}

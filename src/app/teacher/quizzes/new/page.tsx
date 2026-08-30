@@ -17,6 +17,7 @@ import {
   Shuffle,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
+import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 
 export default function NewQuizPage() {
   const router = useRouter();
@@ -282,16 +283,24 @@ export default function NewQuizPage() {
           </div>
         </div>
 
-        <div>
+        <div className="space-y-2">
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
             Description & Instructions
           </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Instructions for students regarding timing, integrity rules, and allowed attempts."
-            className="flat-input text-xs resize-none"
+            rows={3}
+            placeholder="Enter custom instructions or use the assistant below to generate rules based on your active parameters."
+            className="flat-input text-xs"
+          />
+          <SmartRulesAssistant
+            durationMinutes={durationMinutes}
+            maxViolations={maxViolations}
+            questionCount={questions.length}
+            totalPoints={totalCalculatedPoints}
+            currentDescription={description}
+            onUpdateDescription={setDescription}
           />
         </div>
 
