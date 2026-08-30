@@ -16,6 +16,10 @@ import {
   HelpCircle,
   Award,
   Grid,
+  Wifi,
+  WifiOff,
+  Download,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ActiveExamRoomPage({
@@ -35,6 +39,11 @@ export default function ActiveExamRoomPage({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any | null>(null);
 
+  // Network Offline Detection state
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [offlineSubmitModal, setOfflineSubmitModal] = useState<boolean>(false);
+  const [retryCountdown, setRetryCountdown] = useState<number>(5);
+
   // Authoritative Timer state
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const timerInitializedRef = useRef(false);
@@ -44,14 +53,47 @@ export default function ActiveExamRoomPage({
   const [maxViolations, setMaxViolations] = useState(3);
   const [violationModalOpen, setViolationModalOpen] = useState(false);
   const [violationMessage, setViolationMessage] = useState("");
-  
-  // Cooldown and Lockout Refs to prevent duplicate multiple strikes
+
+  // Cooldown and Lockout Refs
   const isSubmittingRef = useRef(false);
   const isModalOpenRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize session
+  // Network Online/Offline listeners
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Automatically sync cached local draft to server on reconnect
+      try {
+        const localSaved = localStorage.getItem(`webquiz_answers_${id}`);
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          fetch(`/api/student/quiz/${id}/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answers: parsed }),
+          }).catch(() => {});
+        }
+      } catch {}
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [id]);
+
+  // Initialize session & load local draft backup if available
   useEffect(() => {
     async function initSession() {
       try {
@@ -76,9 +118,18 @@ export default function ActiveExamRoomPage({
         timerInitializedRef.current = true;
         setViolationCount(json.submission?.violationCount || 0);
         setMaxViolations(json.quiz.maxViolations || 3);
-        if (json.savedAnswers) {
-          setAnswers(json.savedAnswers);
-        }
+
+        // Check local storage backup first, fallback to server draft
+        let initialAnswers: Record<string, string> = json.savedAnswers || {};
+        try {
+          const localDraft = localStorage.getItem(`webquiz_answers_${id}`);
+          if (localDraft) {
+            const parsed = JSON.parse(localDraft);
+            initialAnswers = { ...initialAnswers, ...parsed };
+          }
+        } catch {}
+
+        setAnswers(initialAnswers);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -89,12 +140,17 @@ export default function ActiveExamRoomPage({
     initSession();
   }, [id, router]);
 
-  // Submit Handler
+  // Submit Handler with Automatic Offline Protection
   const handleSubmitQuiz = useCallback(
     async (isAutoSubmit = false) => {
       if (isSubmittingRef.current) return;
       isSubmittingRef.current = true;
       setSubmitting(true);
+
+      // Immediately cache to localStorage before attempting network call
+      try {
+        localStorage.setItem(`webquiz_answers_${id}`, JSON.stringify(answers));
+      } catch {}
 
       try {
         const res = await fetch(`/api/student/quiz/${id}/submit`, {
@@ -118,10 +174,13 @@ export default function ActiveExamRoomPage({
           localStorage.removeItem(`webquiz_answers_${id}`);
         } catch {}
 
+        setOfflineSubmitModal(false);
         setResult(json);
       } catch (e: any) {
-        console.error("Submission failed:", e);
-        alert("Error submitting exam: " + (e.message || "Network issue"));
+        console.error("Submission failed due to network / connectivity:", e);
+        // Do NOT crash or lose answers! Open Offline Recovery Modal
+        isSubmittingRef.current = false;
+        setOfflineSubmitModal(true);
       } finally {
         setSubmitting(false);
       }
@@ -129,7 +188,20 @@ export default function ActiveExamRoomPage({
     [answers, id]
   );
 
-  // Countdown Timer - Only runs when initialized with positive seconds
+  // Auto-retry submitting every 5s if offline submission modal is open
+  useEffect(() => {
+    if (!offlineSubmitModal) return;
+
+    const interval = setInterval(() => {
+      if (navigator.onLine) {
+        handleSubmitQuiz(false);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [offlineSubmitModal, handleSubmitQuiz]);
+
+  // Countdown Timer
   useEffect(() => {
     if (loading || !data || result || secondsRemaining === null || !timerInitializedRef.current) return;
 
@@ -138,7 +210,7 @@ export default function ActiveExamRoomPage({
         if (prev === null) return null;
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmitQuiz(true); // Auto-submit ONLY when live countdown reaches zero
+          handleSubmitQuiz(true);
           return 0;
         }
         return prev - 1;
@@ -148,16 +220,16 @@ export default function ActiveExamRoomPage({
     return () => clearInterval(timer);
   }, [loading, data, result, secondsRemaining, handleSubmitQuiz]);
 
-  // Log Violation Helper with Cooldown Guard
+  // Log Violation Helper
   const recordViolation = useCallback(
     async (eventType: string, details: string) => {
       const now = Date.now();
-      
-      // Strict Guards: Ignore if already submitting, result shown, modal open, or within 6-second cooldown
+
       if (
         result ||
         isSubmittingRef.current ||
         isModalOpenRef.current ||
+        offlineSubmitModal ||
         now - lastViolationTimeRef.current < 6000
       ) {
         return;
@@ -191,28 +263,25 @@ export default function ActiveExamRoomPage({
         console.error("Error reporting violation:", e);
       }
     },
-    [id, result, handleSubmitQuiz]
+    [id, result, offlineSubmitModal, handleSubmitQuiz]
   );
 
-  // Anti-Cheating Event Listeners with Deduplication
+  // Anti-Cheating Event Listeners
   useEffect(() => {
-    if (loading || !data || result) return;
+    if (loading || !data || result || offlineSubmitModal) return;
 
-    // 1. Visibility Change Listener (Tab switch / minimize)
     const handleVisibilityChange = () => {
       if (document.hidden) {
         recordViolation("TAB_SWITCH", "Navigated away from active quiz tab");
       }
     };
 
-    // 2. Window Blur Listener - Only fires if document wasn't hidden (prevents double-counting with visibilitychange)
     const handleWindowBlur = () => {
       if (!document.hidden && !isModalOpenRef.current) {
         recordViolation("WINDOW_BLUR", "Browser window lost focus");
       }
     };
 
-    // 3. Keyboard Shortcut Interception
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === "F12" ||
@@ -224,16 +293,11 @@ export default function ActiveExamRoomPage({
       }
     };
 
-    // 4. Clipboard & Context Menu Prevention
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault();
       recordViolation("CLIPBOARD_ATTEMPT", "Copy attempt blocked");
     };
-
     const handlePaste = (e: ClipboardEvent) => {
       e.preventDefault();
       recordViolation("CLIPBOARD_ATTEMPT", "Paste attempt blocked");
@@ -254,43 +318,64 @@ export default function ActiveExamRoomPage({
       document.removeEventListener("copy", handleCopy);
       document.removeEventListener("paste", handlePaste);
     };
-  }, [loading, data, result, recordViolation]);
+  }, [loading, data, result, offlineSubmitModal, recordViolation]);
 
-  // Debounced Autosave on Answer change (minimizes serverless compute invocations)
+  // Answer change with instant LocalStorage backup + debounced server sync
   const handleAnswerChange = (questionId: string, value: string) => {
     const updated = { ...answers, [questionId]: value };
     setAnswers(updated);
 
-    // Instant local caching for zero-data-loss protection
+    // Instant local caching for 100% zero-data-loss protection
     try {
       localStorage.setItem(`webquiz_answers_${id}`, JSON.stringify(updated));
     } catch {}
 
-    // Debounce serverless network call
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }
 
-    autosaveTimerRef.current = setTimeout(() => {
-      fetch(`/api/student/quiz/${id}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: { [questionId]: value } }),
-      }).catch((e) => console.error("Autosave draft error:", e));
-    }, 1200);
+    if (navigator.onLine) {
+      autosaveTimerRef.current = setTimeout(() => {
+        fetch(`/api/student/quiz/${id}/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers: { [questionId]: value } }),
+        }).catch((e) => console.error("Autosave draft error:", e));
+      }, 1200);
+    }
   };
 
-  // Close Warning Modal & reset modal ref with grace buffer
+  // Emergency Backup File Download
+  const downloadBackupAnswers = () => {
+    const payload = {
+      quizId: id,
+      quizTitle: data?.quiz?.title,
+      studentIdNumber: data?.studentIdNumber,
+      timestamp: new Date().toISOString(),
+      answers,
+      integrityHash: btoa(JSON.stringify(answers)),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `webquiz_backup_${data?.quiz?.subjectCode || "exam"}_${id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleDismissModal = () => {
     setViolationModalOpen(false);
-    // Give 1.5s grace buffer after closing modal before allowing any new blur detections
     setTimeout(() => {
       isModalOpenRef.current = false;
       lastViolationTimeRef.current = Date.now();
     }, 1500);
   };
 
-  // Format time mm:ss
   const formatTime = (secs: number | null) => {
     if (secs === null) return "--:--";
     const mins = Math.floor(secs / 60);
@@ -392,7 +477,7 @@ export default function ActiveExamRoomPage({
         </main>
 
         <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-          &copy; 2026 WebQuiz Academic Exam Engine
+          &copy; 2026 Aurora Alliance - Built with Next.js, Prisma, Tailwind CSS &amp; XLSX.
         </footer>
       </div>
     );
@@ -401,11 +486,11 @@ export default function ActiveExamRoomPage({
   const { quiz, questions } = data;
   const currentQuestion = questions[currentIdx];
   const answeredCount = Object.keys(answers).filter((k) => answers[k]?.trim()).length;
-  const isTimeCritical = secondsRemaining !== null && secondsRemaining <= 120; // 2 mins remaining
+  const isTimeCritical = secondsRemaining !== null && secondsRemaining <= 120;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none exam-lockdown">
-      {/* Sticky High-Integrity Header Bar */}
+      {/* Sticky Header Bar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
           {/* Left: Subject Code & Title */}
@@ -430,8 +515,15 @@ export default function ActiveExamRoomPage({
             <span>{formatTime(secondsRemaining)}</span>
           </div>
 
-          {/* Right: Anti-Cheating Strikes & Submit Action */}
+          {/* Right: Network Status, Anti-Cheating Strikes & Submit Action */}
           <div className="flex items-center gap-2 shrink-0">
+            {!isOnline && (
+              <div className="flex items-center gap-1 px-2 py-1 bg-amber-900/90 text-amber-200 border border-amber-600 text-[11px] font-bold font-mono">
+                <WifiOff className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span className="hidden sm:inline">Offline Mode</span>
+              </div>
+            )}
+
             <div
               className={`flex items-center gap-1 px-2 py-1 text-[11px] sm:text-xs font-mono font-bold border ${
                 violationCount > 0
@@ -448,229 +540,209 @@ export default function ActiveExamRoomPage({
 
             <button
               onClick={() => {
-                if (confirm("Are you sure you want to finish and submit your exam answers?")) {
+                if (confirm(`Submit your exam now? You have answered ${answeredCount} of ${questions.length} questions.`)) {
                   handleSubmitQuiz(false);
                 }
               }}
               disabled={submitting}
-              className="flat-button-primary text-[11px] sm:text-xs py-1.5 px-2.5 sm:px-3 bg-emerald-600 border-emerald-500 hover:bg-emerald-700 flex items-center gap-1 font-bold min-h-[34px] touch-manipulation"
+              className="flat-button-primary text-xs py-1.5 sm:py-2 px-3 sm:px-4 font-bold flex items-center gap-1 min-h-[38px] touch-manipulation"
             >
-              <Send className="w-3 h-3 shrink-0" />
-              <span className="hidden xs:inline">{submitting ? "Grading..." : "Submit"}</span>
+              <Send className="w-3.5 h-3.5" />
+              <span>{submitting ? "Submitting..." : "Finish"}</span>
             </button>
-          </div>
-        </div>
-
-        {/* Mobile Quick-Jump Horizontal Question Bar */}
-        <div className="lg:hidden border-t border-slate-800 bg-slate-950/80 px-3 py-1.5 overflow-x-auto -webkit-overflow-scrolling-touch">
-          <div className="flex items-center gap-1.5 min-w-max">
-            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1 flex items-center gap-1">
-              <Grid className="w-3 h-3" /> Q:
-            </span>
-            {questions.map((q: any, idx: number) => {
-              const isAnswered = !!answers[q.id]?.trim();
-              const isCurrent = idx === currentIdx;
-
-              return (
-                <button
-                  key={q.id}
-                  onClick={() => setCurrentIdx(idx)}
-                  className={`w-7 h-7 text-[11px] font-mono font-bold border transition-colors flex items-center justify-center shrink-0 touch-manipulation ${
-                    isCurrent
-                      ? "bg-indigo-600 text-white border-indigo-400 ring-1 ring-white"
-                      : isAnswered
-                      ? "bg-emerald-900/60 text-emerald-300 border-emerald-700"
-                      : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
-                  }`}
-                >
-                  {idx + 1}
-                </button>
-              );
-            })}
           </div>
         </div>
       </header>
 
-      {/* Main Exam Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8">
-        {/* Left Column: Active Question */}
-        <div className="lg:col-span-8 space-y-4 sm:space-y-6">
-          <div className="flat-card bg-white p-5 sm:p-8 border border-slate-300 space-y-5 sm:space-y-6">
-            {/* Question Header */}
-            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <span className="w-7 h-7 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                  Q{currentIdx + 1}
+      {/* Offline Alert Banner */}
+      {!isOnline && (
+        <div className="bg-amber-600 text-white px-4 py-2 text-xs font-bold flex items-center justify-between gap-2 shadow-sm animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 shrink-0" />
+            <span>
+              Internet connection lost. <strong>Do not leave or close this page!</strong> All your answers are saved securely on this device. Reconnect Wi-Fi or mobile data when submitting.
+            </span>
+          </div>
+          <button
+            onClick={downloadBackupAnswers}
+            className="px-2 py-1 bg-amber-800 hover:bg-amber-900 text-white text-[11px] font-bold shrink-0 flex items-center gap-1 border border-amber-700"
+          >
+            <Download className="w-3 h-3" />
+            <span>Save Backup</span>
+          </button>
+        </div>
+      )}
+
+      {/* Main Exam Room Layout */}
+      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+        {/* Left Col: Current Question Panel */}
+        <div className="lg:col-span-8 flex flex-col space-y-4">
+          <div className="flat-card p-4 sm:p-6 bg-white border-2 border-slate-900 flex-1 flex flex-col justify-between space-y-6 shadow-sm">
+            <div className="space-y-4">
+              {/* Question Index & Points Badge */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 border border-indigo-200">
+                  Question {currentIdx + 1} of {questions.length}
                 </span>
-                <span className="text-xs text-slate-500 font-mono">
-                  of {questions.length} Items
+                <span className="font-mono text-xs font-bold text-slate-500">
+                  {currentQuestion.points} {currentQuestion.points === 1 ? "Point" : "Points"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="flat-badge-slate font-bold uppercase text-[9px] sm:text-[10px]">
-                  {currentQuestion.type.replace("_", " ")}
-                </span>
-                <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5">
-                  {currentQuestion.points} {currentQuestion.points === 1 ? "pt" : "pts"}
-                </span>
+              {/* Question Prompt */}
+              <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                {currentQuestion.prompt}
               </div>
-            </div>
 
-            {/* Prompt Statement */}
-            <div className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
-              {currentQuestion.prompt}
-            </div>
-
-            {/* Choices / Input Area */}
-            <div className="pt-1">
-              {currentQuestion.type === "MULTIPLE_CHOICE" && (
-                <div className="space-y-2.5">
-                  {currentQuestion.options?.map((option: string, optIdx: number) => {
-                    const isSelected = answers[currentQuestion.id] === option;
-                    return (
-                      <label
-                        key={optIdx}
-                        onClick={() => handleAnswerChange(currentQuestion.id, option)}
-                        className={`flex items-center gap-3 p-3.5 sm:p-4 border cursor-pointer transition-all min-h-[48px] touch-manipulation ${
-                          isSelected
-                            ? "bg-indigo-50/90 border-indigo-600 text-indigo-950 font-semibold"
-                            : "bg-white border-slate-300 hover:border-slate-400 active:bg-slate-50 text-slate-800"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`q_${currentQuestion.id}`}
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="w-4 h-4 text-indigo-600 border-slate-300 shrink-0"
-                        />
-                        <span className="text-xs sm:text-sm leading-snug">{option}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              {currentQuestion.type === "TRUE_FALSE" && (
-                <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                  {["True", "False"].map((choice) => {
-                    const isSelected = answers[currentQuestion.id] === choice;
-                    return (
-                      <label
-                        key={choice}
-                        onClick={() => handleAnswerChange(currentQuestion.id, choice)}
-                        className={`p-4 sm:p-5 border text-center font-bold text-sm cursor-pointer transition-all min-h-[52px] flex items-center justify-center touch-manipulation ${
-                          isSelected
-                            ? "bg-indigo-50/90 border-indigo-600 text-indigo-950"
-                            : "bg-white border-slate-300 hover:border-slate-400 active:bg-slate-50 text-slate-800"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`q_${currentQuestion.id}`}
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="sr-only"
-                        />
-                        <span>{choice}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              {currentQuestion.type === "SHORT_ANSWER" && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Your Identification / Short Answer:
-                  </label>
-                  <input
-                    type="text"
-                    value={answers[currentQuestion.id] || ""}
-                    onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                    placeholder="Type your answer here..."
-                    className="flat-input text-sm sm:text-base font-medium py-3 min-h-[46px]"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                  />
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Auto-saves on input. Evaluated server-side upon submit.</span>
+              {/* Interactive Choice / Input Area */}
+              <div className="pt-2">
+                {currentQuestion.type === "MULTIPLE_CHOICE" || currentQuestion.type === "TRUE_FALSE" ? (
+                  <div className="space-y-2.5">
+                    {currentQuestion.options.map((opt: string, optIdx: number) => {
+                      const isSelected = answers[currentQuestion.id] === opt;
+                      return (
+                        <label
+                          key={optIdx}
+                          onClick={() => handleAnswerChange(currentQuestion.id, opt)}
+                          className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
+                            isSelected
+                              ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
+                              : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`question_${currentQuestion.id}`}
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
+                          />
+                          <span className="text-xs sm:text-sm leading-relaxed select-none">
+                            {opt}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                </div>
-              )}
+                ) : currentQuestion.type === "MULTIPLE_ANSWER" ? (
+                  <div className="space-y-2.5">
+                    <p className="text-[11px] text-slate-500 italic">
+                      Select all correct options that apply:
+                    </p>
+                    {currentQuestion.options.map((opt: string, optIdx: number) => {
+                      let selectedArr: string[] = [];
+                      try {
+                        selectedArr = JSON.parse(answers[currentQuestion.id] || "[]");
+                      } catch {
+                        selectedArr = [];
+                      }
+                      const isChecked = selectedArr.includes(opt);
+
+                      return (
+                        <label
+                          key={optIdx}
+                          onClick={() => {
+                            const newArr = isChecked
+                              ? selectedArr.filter((item) => item !== opt)
+                              : [...selectedArr, opt];
+                            handleAnswerChange(currentQuestion.id, JSON.stringify(newArr));
+                          }}
+                          className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
+                            isChecked
+                              ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
+                              : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
+                          />
+                          <span className="text-xs sm:text-sm leading-relaxed select-none">
+                            {opt}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Type your answer below:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Type answer here..."
+                      value={answers[currentQuestion.id] || ""}
+                      onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                      className="flat-input text-xs sm:text-sm py-2.5 sm:py-3 w-full font-mono"
+                      autoFocus
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Answer auto-saves locally immediately.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Navigation Buttons */}
-            <div className="pt-5 sm:pt-6 border-t border-slate-200 flex items-center justify-between gap-2">
+            {/* Bottom Nav Buttons */}
+            <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-2">
               <button
-                type="button"
-                onClick={() => setCurrentIdx((prev) => Math.max(0, prev - 1))}
+                onClick={() => setCurrentIdx((p) => Math.max(0, p - 1))}
                 disabled={currentIdx === 0}
-                className="flat-button-secondary text-xs py-2.5 px-3 sm:px-3.5 flex items-center gap-1 min-h-[42px] touch-manipulation disabled:opacity-30"
+                className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span>Prev</span>
+                <span>Previous</span>
               </button>
 
-              <div className="text-xs font-mono text-slate-500 text-center">
-                {answeredCount}/{questions.length} <span className="hidden xs:inline">Answered</span>
+              <div className="text-[11px] font-mono text-slate-500">
+                {answeredCount} of {questions.length} Answered
               </div>
 
-              {currentIdx < questions.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setCurrentIdx((prev) => Math.min(questions.length - 1, prev + 1))}
-                  className="flat-button-primary text-xs py-2.5 px-3.5 sm:px-4 flex items-center gap-1 min-h-[42px] touch-manipulation font-bold"
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm("Are you ready to submit all answers for grading?")) {
-                      handleSubmitQuiz(false);
-                    }
-                  }}
-                  disabled={submitting}
-                  className="flat-button-primary text-xs py-2.5 px-4 bg-emerald-600 border-emerald-600 hover:bg-emerald-700 font-bold flex items-center gap-1.5 min-h-[42px] touch-manipulation"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Submit</span>
-                </button>
-              )}
+              <button
+                onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
+                disabled={currentIdx === questions.length - 1}
+                className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Question Jump Navigator & Integrity Box (Desktop View) */}
-        <div className="hidden lg:block lg:col-span-4 space-y-6">
-          {/* Question Jump Grid */}
-          <div className="flat-card bg-white p-5 border border-slate-300 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 pb-2 border-b border-slate-200">
-              Question Navigator ({answeredCount}/{questions.length})
-            </h3>
+        {/* Right Col: Question Grid Navigator */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="flat-card p-4 sm:p-5 bg-white border border-slate-300 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Grid className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Question Matrix</span>
+              </h2>
+              <span className="text-[11px] font-mono text-slate-400">
+                {answeredCount}/{questions.length}
+              </span>
+            </div>
 
-            <div className="grid grid-cols-5 gap-2">
+            {/* Number grid */}
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {questions.map((q: any, idx: number) => {
-                const isAnswered = !!answers[q.id]?.trim();
+                const isAnswered = !!answers[q.id]?.trim() && answers[q.id] !== "[]";
                 const isCurrent = idx === currentIdx;
 
                 return (
                   <button
                     key={q.id}
                     onClick={() => setCurrentIdx(idx)}
-                    className={`h-10 text-xs font-mono font-bold border transition-colors flex items-center justify-center ${
+                    className={`h-9 text-xs font-mono font-bold border transition-all flex items-center justify-center min-h-[38px] touch-manipulation ${
                       isCurrent
-                        ? "bg-slate-900 text-white border-slate-900 ring-2 ring-indigo-600 ring-offset-1"
+                        ? "bg-slate-900 text-white border-slate-900 ring-2 ring-indigo-500"
                         : isAnswered
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-bold"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                        ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                        : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                     }`}
                   >
                     {idx + 1}
@@ -679,70 +751,92 @@ export default function ActiveExamRoomPage({
               })}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-100 border border-emerald-400 inline-block" />
-                Answered
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-white border border-slate-300 inline-block" />
-                Unanswered
-              </span>
-            </div>
-          </div>
-
-          {/* Integrity Monitoring Badge */}
-          <div className="flat-card bg-slate-900 text-white p-5 border border-slate-800 space-y-3">
-            <div className="flex items-center gap-2 text-rose-400 font-bold text-xs uppercase tracking-wider">
-              <ShieldAlert className="w-4 h-4" />
-              <span>Anti-Cheat Guard Active</span>
-            </div>
-
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Window focus, tab visibility, clipboard access, and hotkeys are authoritatively monitored.
-            </p>
-
-            <div className="p-3 bg-slate-950 border border-slate-800 font-mono text-xs text-rose-400 flex items-center justify-between">
-              <span>STRIKES ACCUMULATED:</span>
-              <span className="font-bold text-sm">
-                {violationCount} / {maxViolations}
-              </span>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-emerald-600 inline-block" />
+                <span>Answered</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-slate-100 border border-slate-300 inline-block" />
+                <span>Unanswered</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
+                <span>Current</span>
+              </div>
             </div>
           </div>
         </div>
-      </main>
+      </div>
 
-      {/* Full-screen Warning Modal on Infraction */}
+      {/* Warning Strike Modal */}
       {violationModalOpen && (
-        <div className="fixed inset-0 z-50 bg-rose-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="flat-card border-2 border-rose-600 bg-white max-w-[95vw] sm:max-w-md w-full p-5 sm:p-6 text-center space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="w-12 h-12 bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-7 h-7" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="flat-card bg-white border-2 border-rose-600 p-6 sm:p-8 max-w-md w-full text-center space-y-4 animate-in zoom-in-95 shadow-2xl">
+            <div className="w-12 h-12 bg-rose-50 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-7 h-7" />
             </div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              Anti-Cheating Warning Logged
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {violationMessage}
+            </p>
+            <p className="text-[11px] text-rose-700 font-bold bg-rose-50 p-2.5 border border-rose-200">
+              Warning: Reaching {maxViolations} infractions will immediately submit your examination for grading.
+            </p>
+            <button
+              onClick={handleDismissModal}
+              className="flat-button-primary w-full py-2.5 text-xs font-bold"
+            >
+              I Understand & Return to Quiz
+            </button>
+          </div>
+        </div>
+      )}
 
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-rose-950 uppercase tracking-tight">
-                Academic Integrity Violation
-              </h3>
-              <p className="text-xs text-rose-800 mt-2 font-medium leading-relaxed">
-                {violationMessage}
+      {/* Offline Submission Recovery Modal */}
+      {offlineSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs">
+          <div className="flat-card bg-white border-2 border-amber-600 p-6 sm:p-8 max-w-md w-full text-center space-y-4 animate-in zoom-in-95 shadow-2xl">
+            <div className="w-12 h-12 bg-amber-50 border border-amber-300 text-amber-600 flex items-center justify-center mx-auto">
+              <WifiOff className="w-7 h-7" />
+            </div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              Network Connection Lost
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              We could not reach the server because your internet connection dropped. <strong>Do not worry!</strong> All {answeredCount} of your answers are safely stored in your browser.
+            </p>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <p className="font-bold flex items-center justify-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Auto-retrying submission when network reconnects...</span>
+              </p>
+              <p className="text-[11px] text-amber-700">
+                Please check your Wi-Fi, hotspot, or mobile data connection.
               </p>
             </div>
 
-            <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-900 font-mono font-bold">
-              {violationCount >= maxViolations
-                ? "STRIKE LIMIT EXCEEDED. EXAM AUTO-SUBMITTING NOW..."
-                : `WARNING: ${maxViolations - violationCount} STRIKES REMAINING BEFORE AUTO-SUBMIT.`}
-            </div>
-
-            {violationCount < maxViolations && (
+            <div className="pt-2 flex flex-col gap-2">
               <button
-                onClick={handleDismissModal}
-                className="flat-button-danger w-full py-3 text-xs font-bold min-h-[44px] touch-manipulation"
+                onClick={() => handleSubmitQuiz(false)}
+                disabled={submitting}
+                className="flat-button-primary w-full py-3 text-xs font-bold flex items-center justify-center gap-1.5"
               >
-                I Understand - Return to Exam
+                <RefreshCw className={`w-3.5 h-3.5 ${submitting ? "animate-spin" : ""}`} />
+                <span>{submitting ? "Submitting..." : "Retry Submission Now"}</span>
               </button>
-            )}
+
+              <button
+                onClick={downloadBackupAnswers}
+                className="flat-button-secondary w-full py-2.5 text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-700"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Emergency Offline Submission Proof (.json)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
