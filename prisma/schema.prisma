@@ -20,6 +20,9 @@ model Teacher {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   subjects   Subject[]
+
+  @@index([email])
+  @@index([isApproved])
 }
 
 model Subject {
@@ -48,6 +51,7 @@ model Enrollment {
 
   @@unique([subjectId, studentIdNumber])
   @@index([studentIdNumber])
+  @@index([subjectId])
 }
 
 model Quiz {
@@ -67,6 +71,9 @@ model Quiz {
   updatedAt        DateTime     @updatedAt
   questions        Question[]
   submissions      Submission[]
+
+  @@index([subjectId])
+  @@index([subjectId, isPublished])
 }
 
 model Question {
@@ -83,6 +90,9 @@ model Question {
   fuzzyThreshold  Int                @default(1) // Max Levenshtein distance allowed
   orderIndex      Int                @default(0)
   answers         SubmissionAnswer[]
+
+  @@index([quizId])
+  @@index([quizId, orderIndex])
 }
 
 model Submission {
@@ -104,6 +114,7 @@ model Submission {
 
   @@index([studentIdNumber])
   @@index([quizId, studentIdNumber])
+  @@index([quizId, status])
 }
 
 model SubmissionAnswer {
@@ -118,6 +129,7 @@ model SubmissionAnswer {
   matchType      String?    // "EXACT", "SYNONYM", "FUZZY", "INCORRECT"
 
   @@unique([submissionId, questionId])
+  @@index([submissionId])
 }
 
 model ViolationLog {
@@ -127,4 +139,7 @@ model ViolationLog {
   eventType    String     // "TAB_SWITCH", "WINDOW_BLUR", "FULLSCREEN_EXIT", "CLIPBOARD_ATTEMPT", "DEVTOOLS_ATTEMPT"
   details      String?
   timestamp    DateTime   @default(now())
+
+  @@index([submissionId])
+  @@index([submissionId, timestamp])
 }

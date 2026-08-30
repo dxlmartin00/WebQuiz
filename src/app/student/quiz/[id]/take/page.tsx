@@ -49,6 +49,7 @@ export default function ActiveExamRoomPage({
   const isSubmittingRef = useRef(false);
   const isModalOpenRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize session
   useEffect(() => {
@@ -109,6 +110,13 @@ export default function ActiveExamRoomPage({
         if (!res.ok) {
           throw new Error(json.error || "Failed to submit quiz");
         }
+
+        if (autosaveTimerRef.current) {
+          clearTimeout(autosaveTimerRef.current);
+        }
+        try {
+          localStorage.removeItem(`webquiz_answers_${id}`);
+        } catch {}
 
         setResult(json);
       } catch (e: any) {
@@ -248,17 +256,28 @@ export default function ActiveExamRoomPage({
     };
   }, [loading, data, result, recordViolation]);
 
-  // Debounced Autosave on Answer change
+  // Debounced Autosave on Answer change (minimizes serverless compute invocations)
   const handleAnswerChange = (questionId: string, value: string) => {
     const updated = { ...answers, [questionId]: value };
     setAnswers(updated);
 
-    // Sync to server draft in background
-    fetch(`/api/student/quiz/${id}/save`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers: { [questionId]: value } }),
-    }).catch((e) => console.error("Autosave draft error:", e));
+    // Instant local caching for zero-data-loss protection
+    try {
+      localStorage.setItem(`webquiz_answers_${id}`, JSON.stringify(updated));
+    } catch {}
+
+    // Debounce serverless network call
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setTimeout(() => {
+      fetch(`/api/student/quiz/${id}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: { [questionId]: value } }),
+      }).catch((e) => console.error("Autosave draft error:", e));
+    }, 1200);
   };
 
   // Close Warning Modal & reset modal ref with grace buffer
