@@ -6,7 +6,6 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "lummartin@nemsu.edu.ph").toLowe
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Google OAuth 2.0 Provider
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
@@ -32,14 +31,14 @@ export const authOptions: NextAuthOptions = {
                 googleId: account.providerAccountId,
                 avatar: user.image,
                 role: isAdmin ? "ADMIN" : "TEACHER",
-                isApproved: isAdmin ? true : false, // Admin is auto-approved; other teachers require approval
+                isApproved: isAdmin ? true : false,
               },
             });
           } else {
             await prisma.teacher.update({
               where: { email },
               data: {
-                googleId: account.providerAccountId,
+                googleId: account.providerAccountId || existing.googleId,
                 avatar: user.image || existing.avatar,
                 role: isAdmin ? "ADMIN" : existing.role,
                 isApproved: isAdmin ? true : existing.isApproved,
@@ -47,47 +46,74 @@ export const authOptions: NextAuthOptions = {
             });
           }
         } catch (e) {
-          console.error("Error creating/updating Google teacher:", e);
+          console.error("Error creating/updating Google teacher in signIn callback:", e);
         }
       }
       return true;
     },
-    async session({ session, token }) {
-      if (session.user && session.user.email) {
-        const email = session.user.email.toLowerCase().trim();
+    async jwt({ token, user, account }) {
+      // Runs on initial sign in and every subsequent request
+      if (user && user.email) {
+        token.email = user.email.toLowerCase().trim();
+      }
+
+      if (token.email) {
+        const email = token.email.toLowerCase().trim();
         const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
 
-        let teacher = await prisma.teacher.findUnique({
-          where: { email },
-        });
-
-        if (!teacher) {
-          teacher = await prisma.teacher.create({
-            data: {
-              email,
-              name: session.user.name || "Faculty Member",
-              avatar: session.user.image,
-              role: isAdmin ? "ADMIN" : "TEACHER",
-              isApproved: isAdmin ? true : false,
-            },
+        try {
+          let teacher = await prisma.teacher.findUnique({
+            where: { email },
           });
-        }
 
-        session.user.id = teacher.id;
-        session.user.role = teacher.role;
-        session.user.isApproved = teacher.isApproved;
+          if (!teacher) {
+            teacher = await prisma.teacher.create({
+              data: {
+                email,
+                name: token.name || "Faculty Member",
+                googleId: account?.providerAccountId,
+                avatar: token.picture as string | undefined,
+                role: isAdmin ? "ADMIN" : "TEACHER",
+                isApproved: isAdmin ? true : false,
+              },
+            });
+          }
+
+          token.id = teacher.id;
+          token.role = teacher.role;
+          token.isApproved = teacher.isApproved;
+        } catch (err) {
+          console.error("JWT teacher sync error:", err);
+          // Fallback values so user is never locked out
+          if (isAdmin) {
+            token.role = "ADMIN";
+            token.isApproved = true;
+          }
+        }
+      }
+
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.email) {
+        session.user.id = (token.id as string) || (token.sub as string);
+        session.user.role = (token.role as string) || "TEACHER";
+        session.user.isApproved = token.isApproved !== undefined ? (token.isApproved as boolean) : false;
+        session.user.email = token.email as string;
+
+        // If admin email, ensure always approved
+        const email = (token.email as string).toLowerCase().trim();
+        if (email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph") {
+          session.user.role = "ADMIN";
+          session.user.isApproved = true;
+        }
       }
       return session;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
     },
   },
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: "/teacher/login",

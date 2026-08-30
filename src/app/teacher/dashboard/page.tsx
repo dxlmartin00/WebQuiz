@@ -25,12 +25,25 @@ export default async function TeacherDashboardPage() {
     redirect("/teacher/login");
   }
 
-  const teacher = await prisma.teacher.findUnique({
+  let teacher = await prisma.teacher.findUnique({
     where: { email: session.user.email.toLowerCase().trim() },
   });
 
+  // Self-healing: Ensure teacher record exists in DB if session is valid
   if (!teacher) {
-    redirect("/teacher/login");
+    const email = session.user.email.toLowerCase().trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || "lummartin@nemsu.edu.ph").toLowerCase().trim();
+    const isAdmin = email === adminEmail || email === "lummartin@nemsu.edu.ph";
+
+    teacher = await prisma.teacher.create({
+      data: {
+        email,
+        name: session.user.name || "Faculty Member",
+        avatar: session.user.image,
+        role: isAdmin ? "ADMIN" : "TEACHER",
+        isApproved: isAdmin ? true : false,
+      },
+    });
   }
 
   if (!teacher.isApproved) {

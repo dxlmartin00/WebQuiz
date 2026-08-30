@@ -1,16 +1,30 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { GraduationCap, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { GraduationCap, AlertCircle, ShieldCheck } from "lucide-react";
 
 function TeacherLoginForm() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const authError = searchParams.get("error");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If already logged in, redirect directly to dashboard or pending approval
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      const isApproved = (session.user as any).isApproved;
+      if (isApproved === false) {
+        router.push("/teacher/pending-approval");
+      } else {
+        router.push("/teacher/dashboard");
+      }
+    }
+  }, [status, session, router]);
 
   useEffect(() => {
     if (authError) {
@@ -54,7 +68,7 @@ function TeacherLoginForm() {
       <div className="space-y-4">
         <button
           onClick={handleGoogleLogin}
-          disabled={loading}
+          disabled={loading || status === "loading"}
           type="button"
           className="flat-button-primary w-full py-3 text-sm font-bold flex items-center justify-center gap-3 bg-white text-slate-800 border-2 border-slate-900 hover:bg-slate-50 min-h-[48px] shadow-sm hover:shadow transition-all"
         >
@@ -76,7 +90,7 @@ function TeacherLoginForm() {
               d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.25 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
             />
           </svg>
-          <span>{loading ? "Redirecting to Google..." : "Continue with Google Account"}</span>
+          <span>{loading || status === "loading" ? "Redirecting..." : "Continue with Google Account"}</span>
         </button>
 
         <div className="bg-slate-50 border border-slate-200 p-4 space-y-2 text-xs text-slate-600">

@@ -27,7 +27,7 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
           router.push("/teacher/pending-approval");
         }
       } else {
-        if (pathname === "/teacher/pending-approval") {
+        if (pathname === "/teacher/pending-approval" || pathname === "/teacher/login") {
           router.push("/teacher/dashboard");
         }
       }
