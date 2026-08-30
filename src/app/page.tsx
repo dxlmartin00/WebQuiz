@@ -50,10 +50,6 @@ export default function LandingPage() {
     }
   };
 
-  const handleDemoStudent = (id: string) => {
-    setStudentId(id);
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       {/* Top Navigation */}
@@ -63,18 +59,20 @@ export default function LandingPage() {
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700">
               W
             </div>
-            <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">
+            <span className="font-black text-slate-900 tracking-tight text-base sm:text-lg">
               WebQuiz
+            </span>
+            <span className="text-[10px] sm:text-xs font-mono uppercase bg-slate-100 text-slate-600 px-1.5 py-0.5 border border-slate-200">
+              Academic v1.0
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               href="/teacher/login"
-              className="flat-button-secondary text-xs sm:text-sm py-1.5 sm:py-2 px-2.5 sm:px-3.5 flex items-center gap-1.5 min-h-[36px] touch-manipulation"
+              className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold min-h-[38px] flex items-center justify-center"
             >
-              <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0" />
-              <span>Teacher Portal</span>
+              Faculty Portal &rarr;
             </Link>
           </div>
         </div>
@@ -82,88 +80,104 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <main className="flex-1 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-        {/* Left Column: Mission & Features */}
+        {/* Left Col: Platform Description */}
         <div className="lg:col-span-7 space-y-4 sm:space-y-6">
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wider">
-            <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0" />
-            <span>Authoritative & Secure Examination Engine</span>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold font-mono">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>NEMSU Academic Online Examination System</span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 leading-tight">
-            Precision Quiz Management, Automated Grading & Anti-Cheat.
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+            Seamless Quizzes, Instant Automated Grading & Anti-Cheating.
           </h1>
 
-          <p className="text-sm sm:text-base lg:text-lg text-slate-600 leading-relaxed">
-            Engineered for academic rigor. Features Levenshtein fuzzy short-answer evaluation, server-authoritative timekeeping, real-time tab-blur strike tracking, and instant Excel gradebook export.
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            WebQuiz provides professors and faculty with automated grading, student roster verification, Excel gradebook export, and real-time focus tracking safeguards.
           </p>
 
-          {/* Key Feature Badges */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-2 sm:pt-4">
-            <div className="flat-card p-3.5 sm:p-4 border-l-4 border-l-indigo-600 bg-white">
-              <Zap className="w-5 h-5 text-indigo-600 mb-1.5" />
-              <h3 className="font-bold text-slate-900 text-xs sm:text-sm">Automated Grading</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Fuzzy answer matching, synonym normalization & instant scoring.
+          {/* Value Props Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-2">
+            <div className="flat-card p-3 sm:p-4 bg-white border-l-4 border-l-indigo-600">
+              <div className="flex items-center gap-2 font-bold text-slate-900 text-xs sm:text-sm">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Anti-Cheating Tracking</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Monitors blur events and tab switches with auto-submission limits.
               </p>
             </div>
 
-            <div className="flat-card p-3.5 sm:p-4 border-l-4 border-l-rose-600 bg-white">
-              <Lock className="w-5 h-5 text-rose-600 mb-1.5" />
-              <h3 className="font-bold text-slate-900 text-xs sm:text-sm">Anti-Cheat Lockdown</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Tab-switch detection, clipboard lockouts & shortcut intercepts.
+            <div className="flat-card p-3 sm:p-4 bg-white border-l-4 border-l-emerald-600">
+              <div className="flex items-center gap-2 font-bold text-slate-900 text-xs sm:text-sm">
+                <Zap className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Instant Auto-Grading</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Multiple choice, multiple answer, and fuzzy text matching.
               </p>
             </div>
 
-            <div className="flat-card p-3.5 sm:p-4 border-l-4 border-l-emerald-600 bg-white">
-              <Award className="w-5 h-5 text-emerald-600 mb-1.5" />
-              <h3 className="font-bold text-slate-900 text-xs sm:text-sm">1-Click XLSX Export</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Comprehensive gradebooks, item analysis & cheating audit logs.
+            <div className="flat-card p-3 sm:p-4 bg-white border-l-4 border-l-amber-600">
+              <div className="flex items-center gap-2 font-bold text-slate-900 text-xs sm:text-sm">
+                <BookOpen className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Excel Class List Importer</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Directly import official NEMSU student rosters from XLSX/CSV.
+              </p>
+            </div>
+
+            <div className="flat-card p-3 sm:p-4 bg-white border-l-4 border-l-slate-900">
+              <div className="flex items-center gap-2 font-bold text-slate-900 text-xs sm:text-sm">
+                <Lock className="w-4 h-4 text-slate-900 shrink-0" />
+                <span>Roster Access Gate</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Only enrolled student IDs can start designated quizzes.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Student Fast Entry Portal */}
-        <div className="lg:col-span-5">
-          <div className="flat-card border-2 border-slate-900 bg-white p-5 sm:p-8">
-            <div className="flex items-center justify-between pb-3 sm:pb-4 mb-4 sm:mb-6 border-b border-slate-200">
-              <div>
-                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                  Student Portal Access
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Enter your enrolled Student ID Number to enter.
-                </p>
+        {/* Right Col: Student Portal Quick Access Card */}
+        <div className="lg:col-span-5 w-full">
+          <div className="flat-card p-5 sm:p-7 bg-white border-2 border-slate-900 shadow-xl space-y-4 sm:space-y-5">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono mb-1">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Student Portal</span>
               </div>
-              <div className="w-8 h-8 bg-slate-100 border border-slate-300 flex items-center justify-center font-mono text-xs font-bold text-slate-700 shrink-0">
-                ID
-              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Enter Exam Room
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Enter your enrolled student ID number to view and start your quizzes.
+              </p>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleStudentLogin} className="space-y-3.5 sm:space-y-4">
+            <form onSubmit={handleStudentLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Student ID Number
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g. 2023-10492"
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="e.g. STU-1001"
+                  className="flat-input font-mono text-sm py-2.5 sm:py-3 w-full"
                   required
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck="false"
-                  className="flat-input font-mono text-base py-3 min-h-[46px]"
+                  autoFocus
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Must be registered in your professor's class roster.
+                </p>
               </div>
 
               <button
@@ -175,29 +189,6 @@ export default function LandingPage() {
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-
-            {/* Quick Demo Student Picker */}
-            <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-200">
-              <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-2">
-                Quick Demo Enrolled Students (Tap to fill):
-              </div>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {[
-                  { id: "STU-1001", name: "Alice J." },
-                  { id: "STU-1002", name: "Bob S." },
-                  { id: "STU-1003", name: "Charlie D." },
-                ].map((demo) => (
-                  <button
-                    key={demo.id}
-                    type="button"
-                    onClick={() => handleDemoStudent(demo.id)}
-                    className="text-xs px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-800 font-mono transition-colors min-h-[36px] touch-manipulation"
-                  >
-                    {demo.id} ({demo.name})
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Faculty Switch Link */}
             <div className="mt-4 pt-3.5 border-t border-slate-100 text-center">
@@ -217,7 +208,7 @@ export default function LandingPage() {
       <footer className="border-t border-slate-200 bg-white py-4 sm:py-6">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-xs text-slate-500">
           <div className="text-center sm:text-left">
-            &copy; 2026 WebQuiz Systems Inc. Built with Next.js, Prisma, Tailwind CSS & XLSX.
+            &copy; 2026 Aurora Alliance - Built with Next.js, Prisma, Tailwind CSS &amp; XLSX.
           </div>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">

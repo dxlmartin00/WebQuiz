@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, ArrowRight, User, AlertCircle } from "lucide-react";
+import { ArrowLeft, UserCheck, ArrowRight, ShieldCheck } from "lucide-react";
 
 export default function StudentLoginPage() {
   const router = useRouter();
@@ -11,7 +11,7 @@ export default function StudentLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentId.trim()) return;
 
@@ -26,6 +26,7 @@ export default function StudentLoginPage() {
       });
 
       const data = await res.json();
+
       if (!res.ok) {
         throw new Error(data.error || "Failed to log in.");
       }
@@ -40,61 +41,65 @@ export default function StudentLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700">
+    <div className="min-h-screen flex flex-col justify-between bg-slate-50">
+      {/* Top minimal header */}
+      <header className="border-b border-slate-200 bg-white py-3.5 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <Link
+            href="/"
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 py-1 min-h-[36px]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Home</span>
+          </Link>
+          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+            <span className="w-5 h-5 bg-slate-900 text-white flex items-center justify-center font-mono text-[10px]">
               W
-            </div>
-            <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">
-              WebQuiz
             </span>
-          </Link>
-
-          <Link href="/teacher/login" className="text-xs text-indigo-600 font-bold hover:underline py-1">
-            Faculty Sign-In &rarr;
-          </Link>
+            <span>WebQuiz Student Portal</span>
+          </div>
         </div>
       </header>
 
-      <div className="max-w-md w-full mx-auto px-4 py-6 sm:py-12">
-        <div className="flat-card border-2 border-slate-900 bg-white p-6 sm:p-8 space-y-5 sm:space-y-6">
-          <div className="text-center pb-4 border-b border-slate-200">
-            <div className="w-12 h-12 bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-              <User className="w-6 h-6" />
+      {/* Main card */}
+      <div className="w-full max-w-md mx-auto p-4 sm:p-6 my-auto">
+        <div className="flat-card p-6 sm:p-8 bg-white border-2 border-slate-900 shadow-xl space-y-5">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono">
+              <UserCheck className="w-4 h-4" />
+              <span>Assessment Access</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Student Portal Access
+              Student Sign In
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Enter your enrolled Student ID Number to access assigned quizzes.
+            <p className="text-xs text-slate-500">
+              Enter your official enrolled Student ID to access your active examinations.
             </p>
           </div>
 
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{error}</span>
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Student ID Number
               </label>
               <input
                 type="text"
+                placeholder="e.g. 2023-10492"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                placeholder="e.g. STU-1001"
+                className="flat-input font-mono text-sm py-2.5 sm:py-3 w-full"
                 required
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck="false"
-                className="flat-input font-mono text-base py-3 min-h-[46px]"
+                autoFocus
               />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Must be listed in your professor's class roster.
+              </p>
             </div>
 
             <button
@@ -106,29 +111,11 @@ export default function StudentLoginPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
-
-          <div className="pt-4 border-t border-slate-100">
-            <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-2">
-              Quick Demo IDs (Tap to fill):
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {["STU-1001", "STU-1002", "STU-1003", "STU-1004"].map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setStudentId(id)}
-                  className="text-xs px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-800 font-mono transition-colors min-h-[36px] touch-manipulation"
-                >
-                  {id}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        &copy; 2026 WebQuiz Student Assessment Platform
+        &copy; 2026 Aurora Alliance - Built with Next.js, Prisma, Tailwind CSS &amp; XLSX.
       </footer>
     </div>
   );
