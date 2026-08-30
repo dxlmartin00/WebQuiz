@@ -15,10 +15,15 @@ import {
   ShieldCheck,
   AlertTriangle,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
+import { StatCardSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { useToast } from "@/components/ui/ToastContext";
 
 export default function TeacherDashboardPage() {
   const { data: session } = useSession();
+  const toast = useToast();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +42,7 @@ export default function TeacherDashboardPage() {
     } catch (e: any) {
       console.error("Dashboard error:", e);
       setError(e.message || "Failed to load dashboard data");
+      toast.error("Dashboard Error", e.message || "Could not load statistics");
     } finally {
       setLoading(false);
     }
@@ -112,7 +118,7 @@ export default function TeacherDashboardPage() {
           <span>{error}</span>
           <button
             onClick={fetchDashboardData}
-            className="flat-button-secondary text-xs py-1 px-2 flex items-center gap-1 text-rose-700"
+            className="flat-button-secondary text-xs py-1 px-2 flex items-center gap-1 text-rose-700 font-semibold"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Retry</span>
@@ -120,67 +126,78 @@ export default function TeacherDashboardPage() {
         </div>
       )}
 
-      {/* Metrics Row */}
+      {/* Metrics Row (Skeletons when loading) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="flat-card p-4 sm:p-5 border-l-4 border-l-slate-900 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Active Classes
-            </span>
-            <BookOpen className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
-            {loading ? "..." : stats.activeClasses}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1 font-medium">
-            {loading ? "..." : `${stats.totalEnrollments} enrolled student IDs`}
-          </div>
-        </div>
+        {loading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <div className="flat-card p-4 sm:p-5 border-l-4 border-l-slate-900 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Active Classes
+                </span>
+                <BookOpen className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
+                {stats.activeClasses}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 font-medium">
+                {stats.totalEnrollments} enrolled student IDs
+              </div>
+            </div>
 
-        <div className="flat-card p-4 sm:p-5 border-l-4 border-l-indigo-600 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Quizzes
-            </span>
-            <FileQuestion className="w-4 h-4 text-indigo-500" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
-            {loading ? "..." : stats.totalQuizzes}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1 font-medium">
-            {loading ? "..." : `${stats.publishedQuizzes} currently published`}
-          </div>
-        </div>
+            <div className="flat-card p-4 sm:p-5 border-l-4 border-l-indigo-600 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Total Quizzes
+                </span>
+                <FileQuestion className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
+                {stats.totalQuizzes}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 font-medium">
+                {stats.publishedQuizzes} currently published
+              </div>
+            </div>
 
-        <div className="flat-card p-4 sm:p-5 border-l-4 border-l-emerald-600 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Student Submissions
-            </span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
-            {loading ? "..." : stats.totalSubmissions}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1 font-medium">
-            Auto-graded and recorded
-          </div>
-        </div>
+            <div className="flat-card p-4 sm:p-5 border-l-4 border-l-emerald-600 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Student Submissions
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
+                {stats.totalSubmissions}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 font-medium">
+                Auto-graded and recorded
+              </div>
+            </div>
 
-        <div className="flat-card p-4 sm:p-5 border-l-4 border-l-rose-600 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Integrity Flags
-            </span>
-            <ShieldAlert className="w-4 h-4 text-rose-500" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-rose-600 mt-2 font-mono">
-            {loading ? "..." : stats.totalViolations}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1 font-medium">
-            Tab switches & blur infractions
-          </div>
-        </div>
+            <div className="flat-card p-4 sm:p-5 border-l-4 border-l-rose-600 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Integrity Flags
+                </span>
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-rose-600 mt-2 font-mono">
+                {stats.totalViolations}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 font-medium">
+                Tab switches & blur infractions
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Quizzes Management List */}
@@ -203,8 +220,9 @@ export default function TeacherDashboardPage() {
         </div>
 
         {loading ? (
-          <div className="py-12 text-center text-xs text-slate-400 font-mono">
-            Loading faculty dashboard metrics...
+          <div className="space-y-3">
+            <CardSkeleton />
+            <CardSkeleton />
           </div>
         ) : quizzes.length === 0 ? (
           <div className="flat-card p-8 sm:p-12 text-center bg-white border border-slate-200">
@@ -230,9 +248,7 @@ export default function TeacherDashboardPage() {
               >
                 <div className="space-y-1.5 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="flat-badge-slate font-mono font-bold">
-                      {quiz.subjectCode}
-                    </span>
+                    <CopyButton text={quiz.subjectCode} />
                     {quiz.isPublished ? (
                       <span className="flat-badge-emerald font-semibold">Published</span>
                     ) : (

@@ -14,9 +14,14 @@ import {
   AlertCircle,
   AlertTriangle,
   FileSpreadsheet,
-  FileText,
+  Search,
+  RefreshCw,
 } from "lucide-react";
 import ClassListImportModal from "@/components/teacher/ClassListImportModal";
+import { TableSkeleton } from "@/components/ui/Skeleton";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { useToast } from "@/components/ui/ToastContext";
 
 export default function SubjectDetailPage({
   params,
@@ -25,6 +30,7 @@ export default function SubjectDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const toast = useToast();
   const [subject, setSubject] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,11 +42,14 @@ export default function SubjectDetailPage({
 
   // Smart Class List Importer Modal
   const [showImportModal, setShowImportModal] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Subject Deletion modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingSubject, setDeletingSubject] = useState(false);
+
+  // Student removal confirmation
+  const [studentToDelete, setStudentToDelete] = useState<{ idNumber: string; name: string } | null>(null);
+  const [removingStudent, setRemovingStudent] = useState(false);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,12 +57,17 @@ export default function SubjectDetailPage({
   const fetchSubject = async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch(`/api/teacher/subjects/${id}`);
-      if (!res.ok) throw new Error("Failed to load subject details");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to load class details");
+      }
       const data = await res.json();
       setSubject(data.subject);
     } catch (e: any) {
       setError(e.message);
+      toast.error("Error", e.message);
     } finally {
       setLoading(false);
     }
@@ -63,395 +77,348 @@ export default function SubjectDetailPage({
     fetchSubject();
   }, [id]);
 
-  const handleAddSingle = async (e: React.FormEvent) => {
+  const handleAddSingleStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!singleId.trim()) return;
+    if (!singleId.trim() || !singleName.trim()) return;
 
     setAddingSingle(true);
-    setError(null);
-    setSuccessMsg(null);
 
     try {
       const res = await fetch(`/api/teacher/subjects/${id}/roster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          studentIdNumber: singleId.trim().toUpperCase(),
-          studentName: singleName.trim() || "Student",
+          students: [
+            {
+              studentIdNumber: singleId.trim(),
+              studentName: singleName.trim(),
+            },
+          ],
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add student");
 
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add student");
+      }
+
+      toast.success("Student Enrolled", `${singleName.trim()} (${singleId.trim()}) added to roster.`);
       setSingleId("");
       setSingleName("");
-      setSuccessMsg(`Enrolled student ${singleId.toUpperCase()} successfully.`);
       fetchSubject();
     } catch (e: any) {
-      setError(e.message);
+      toast.error("Enrollment Error", e.message);
     } finally {
       setAddingSingle(false);
     }
   };
 
-  const handleRemoveStudent = async (studentIdNumber: string) => {
-    if (!confirm(`Are you sure you want to remove ${studentIdNumber} from this class roster?`)) {
-      return;
-    }
+  const handleRemoveStudent = async () => {
+    if (!studentToDelete) return;
+    setRemovingStudent(true);
 
     try {
-      const res = await fetch(
-        `/api/teacher/subjects/${id}/roster?studentIdNumber=${encodeURIComponent(studentIdNumber)}`,
-        { method: "DELETE" }
-      );
-      if (!res.ok) throw new Error("Failed to remove student");
+      const res = await fetch(`/api/teacher/subjects/${id}/roster`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIdNumber: studentToDelete.idNumber,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove student");
+      }
+
+      toast.success("Student Removed", `${studentToDelete.name} was removed from this roster.`);
+      setStudentToDelete(null);
       fetchSubject();
     } catch (e: any) {
-      setError(e.message);
+      toast.error("Removal Error", e.message);
+    } finally {
+      setRemovingStudent(false);
     }
   };
 
-  const handleDeleteSubjectEntirely = async () => {
+  const handleDeleteSubject = async () => {
     setDeletingSubject(true);
-    setError(null);
 
     try {
       const res = await fetch(`/api/teacher/subjects/${id}`, {
         method: "DELETE",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete subject.");
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete subject");
+      }
+
+      toast.success("Class Deleted", "Class and roster deleted.");
       router.push("/teacher/subjects");
-      router.refresh();
     } catch (e: any) {
-      setError(e.message);
+      toast.error("Deletion Error", e.message);
       setDeletingSubject(false);
     }
   };
 
-  if (loading) {
+  if (loading && !subject) {
     return (
-      <div className="p-8 text-center text-xs text-slate-500 font-mono">
-        Loading class details and roster...
+      <div className="p-4 sm:p-8 space-y-6 max-w-7xl">
+        <TableSkeleton rows={8} columns={4} />
       </div>
     );
   }
 
-  if (!subject) {
+  if (error || !subject) {
     return (
-      <div className="p-8 text-center text-sm text-rose-600">
-        Subject section not found.
+      <div className="p-4 sm:p-8 space-y-6 max-w-7xl">
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <span>{error || "Subject not found"}</span>
+          <Link href="/teacher/subjects" className="flat-button-secondary text-xs py-1 px-2.5">
+            &larr; Back to Classes
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const filteredEnrollments = (subject.enrollments || []).filter(
-    (e: any) =>
-      e.studentIdNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.studentName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const enrollments = subject.enrollments || [];
+  const filteredEnrollments = enrollments.filter((e: any) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      e.studentIdNumber.toLowerCase().includes(q) ||
+      e.studentName.toLowerCase().includes(q)
+    );
+  });
 
   return (
-    <div className="p-6 sm:p-8 space-y-8 max-w-7xl">
-      {/* Back link & Header */}
-      <div className="space-y-4 pb-6 border-b border-slate-200">
-        <Link
-          href="/teacher/subjects"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Classes</span>
-        </Link>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="flat-badge-indigo font-mono text-xs">
-                {subject.subjectCode}
-              </span>
-              <span className="text-xs text-slate-500">
-                {subject.enrollments?.length || 0} Enrolled Students
-              </span>
-            </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-w-7xl">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+        <div>
+          <Link
+            href="/teacher/subjects"
+            className="text-xs font-semibold text-indigo-600 hover:underline flex items-center gap-1 mb-2"
+          >
+            <ArrowLeft className="w-3 h-3" /> Back to Classes
+          </Link>
+          <div className="flex items-center gap-2.5">
+            <CopyButton text={subject.subjectCode} />
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               {subject.title}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              {subject.description || "No description provided."}
-            </p>
           </div>
+          {subject.description && (
+            <p className="text-xs text-slate-500 mt-1">{subject.description}</p>
+          )}
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flat-button-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold shadow-xs hover:border-indigo-600"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-              <span>Upload Class List (.xlsx, .csv)</span>
-            </button>
-
-            <Link
-              href="/teacher/quizzes/new"
-              className="flat-button-primary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Assign Quiz</span>
-            </Link>
-
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="flat-button-secondary text-xs py-2 px-3 flex items-center gap-1.5 text-rose-600 hover:border-rose-300 hover:bg-rose-50 font-semibold"
-              title="Delete entire class"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Class</span>
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flat-button-primary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Class List</span>
+          </button>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="p-2 border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-300 text-slate-400 hover:text-rose-600 transition-colors"
+            title="Delete Class"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Notifications */}
-      {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Enrolled Students Table */}
-        <div className="lg:col-span-8 space-y-4">
+      {/* Roster & Quick Add Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Cols: Student Roster Table */}
+        <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Users className="w-4 h-4 text-indigo-600" />
-              <span>Enrolled Student Roster</span>
-            </h2>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <span>Enrolled Students ({enrollments.length})</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Only students listed below are authorized to take quizzes in this subject.
+              </p>
+            </div>
 
-            <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
+                placeholder="Search student or ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search ID or Student Name..."
-                className="flat-input text-xs sm:w-64 py-1.5"
+                className="flat-input text-xs pl-8 py-1.5 w-full"
               />
             </div>
           </div>
 
-          <div className="flat-card bg-white border border-slate-200 overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Student ID</th>
-                  <th className="px-4 py-3">Student Name</th>
-                  <th className="px-4 py-3">Enrolled Date</th>
-                  <th className="px-4 py-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {filteredEnrollments.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                      No students enrolled matching search criteria. Use the "Upload Class List" button above to import your roster.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEnrollments.map((enrolled: any, index: number) => (
-                    <tr key={enrolled.id} className="hover:bg-slate-50/70">
-                      <td className="px-4 py-3 text-slate-400 font-mono text-[11px]">
-                        {index + 1}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                        {enrolled.studentIdNumber}
-                      </td>
-                      <td className="px-4 py-3 text-slate-800 font-semibold">
-                        {enrolled.studentName}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
-                        {new Date(enrolled.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleRemoveStudent(enrolled.studentIdNumber)}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                          title="Remove Student from Roster"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+          {enrollments.length === 0 ? (
+            <div className="flat-card p-10 text-center bg-white border border-slate-200">
+              <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <h3 className="font-bold text-slate-900 text-sm">No students enrolled yet</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Use the spreadsheet importer or add students manually using the form on the right.
+              </p>
+            </div>
+          ) : (
+            <div className="flat-card bg-white overflow-hidden border border-slate-200 shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 font-bold text-slate-700">#</th>
+                      <th className="px-4 py-3 font-bold text-slate-700">Student ID</th>
+                      <th className="px-4 py-3 font-bold text-slate-700">Full Name</th>
+                      <th className="px-4 py-3 font-bold text-slate-700">Enrolled On</th>
+                      <th className="px-4 py-3 text-right font-bold text-slate-700">Action</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                    {filteredEnrollments.map((e: any, idx: number) => (
+                      <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-2.5 text-slate-400 font-sans">{idx + 1}</td>
+                        <td className="px-4 py-2.5 font-bold text-indigo-700">
+                          <CopyButton text={e.studentIdNumber} />
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-900 font-sans font-medium">
+                          {e.studentName}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-400 font-sans">
+                          {new Date(e.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-sans">
+                          <button
+                            onClick={() =>
+                              setStudentToDelete({
+                                idNumber: e.studentIdNumber,
+                                name: e.studentName,
+                              })
+                            }
+                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                            title="Remove student"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right Column: Add Individual Student & Assigned Quizzes */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Quick Add Form */}
-          <div className="flat-card bg-white p-5 border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-3 border-b border-slate-200 mb-4">
+        {/* Right Col: Manual Student Entry Form */}
+        <div className="space-y-4">
+          <div className="flat-card p-5 bg-white space-y-4 border border-slate-200">
+            <h2 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-1.5">
               <UserPlus className="w-4 h-4 text-indigo-600" />
               <span>Enroll Single Student</span>
-            </h3>
+            </h2>
 
-            <form onSubmit={handleAddSingle} className="space-y-3">
+            <form onSubmit={handleAddSingleStudent} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Student ID Number *
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g., 2023-10492"
                   value={singleId}
                   onChange={(e) => setSingleId(e.target.value)}
-                  placeholder="e.g. 1006261 or STU-1001"
                   required
-                  className="flat-input font-mono uppercase text-xs"
+                  className="flat-input text-xs font-mono uppercase w-full"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                  Student Full Name
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Student Full Name *
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g., Juan Dela Cruz"
                   value={singleName}
                   onChange={(e) => setSingleName(e.target.value)}
-                  placeholder="e.g. AGUDO, FRAGILE JOHN C."
-                  className="flat-input text-xs"
+                  required
+                  className="flat-input text-xs w-full"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={addingSingle}
-                className="flat-button-dark w-full text-xs py-2 mt-2 font-bold"
+                className="flat-button-primary text-xs w-full py-2 font-bold"
               >
-                {addingSingle ? "Enrolling..." : "Add to Roster"}
+                {addingSingle ? "Adding Student..." : "Add to Roster"}
               </button>
             </form>
           </div>
 
-          {/* Assigned Quizzes under this subject */}
-          <div className="flat-card bg-white p-5 border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <FileQuestion className="w-4 h-4 text-slate-600" />
-                <span>Class Quizzes ({subject.quizzes?.length || 0})</span>
-              </h3>
-              <Link
-                href="/teacher/quizzes/new"
-                className="text-xs font-bold text-indigo-600 hover:underline"
-              >
-                + New
-              </Link>
-            </div>
-
-            <div className="space-y-2">
-              {subject.quizzes?.length === 0 ? (
-                <div className="text-xs text-slate-400 py-3 text-center">
-                  No quizzes assigned yet.
-                </div>
-              ) : (
-                subject.quizzes?.map((q: any) => (
-                  <Link
-                    key={q.id}
-                    href={`/teacher/quizzes/${q.id}/gradebook`}
-                    className="block p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors"
-                  >
-                    <div className="text-xs font-bold text-slate-900 truncate">
-                      {q.title}
-                    </div>
-                    <div className="text-[11px] text-slate-500 flex items-center justify-between mt-1">
-                      <span>{q._count?.questions || 0} questions</span>
-                      <span>{q._count?.submissions || 0} submissions</span>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
+          <div className="flat-card p-5 bg-indigo-50/60 border border-indigo-100 space-y-2">
+            <h3 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Batch Roster Import</span>
+            </h3>
+            <p className="text-[11px] text-indigo-800 leading-relaxed">
+              Have an official NEMSU class list or Excel file? Upload it directly with our smart column detector.
+            </p>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flat-button-primary text-xs w-full py-1.5 mt-2 font-bold"
+            >
+              Open Class List Importer
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Class List Excel/CSV Import & Review Modal */}
+      {/* Class List Import Modal */}
       <ClassListImportModal
-        subjectId={subject.id}
-        subjectCode={subject.subjectCode}
-        existingEnrollments={subject.enrollments || []}
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        subjectId={id}
+        subjectCode={subject.subjectCode}
+        existingEnrollments={enrollments}
         onSuccess={(count) => {
-          setSuccessMsg(`Successfully imported and enrolled ${count} students into the class roster!`);
+          toast.success("Roster Imported", `${count} students successfully enrolled into ${subject.subjectCode}.`);
           fetchSubject();
         }}
       />
 
-      {/* Subject Deletion Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="flat-card border-2 border-rose-600 bg-white max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="w-12 h-12 bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
+      {/* Confirmation: Remove Single Student */}
+      <ConfirmModal
+        isOpen={!!studentToDelete}
+        title="Remove Student from Roster"
+        message={`Are you sure you want to remove ${studentToDelete?.name} (${studentToDelete?.idNumber}) from this class?`}
+        confirmText={removingStudent ? "Removing..." : "Remove Student"}
+        isDestructive={true}
+        onConfirm={handleRemoveStudent}
+        onCancel={() => setStudentToDelete(null)}
+      />
 
-            <div className="text-center space-y-1.5">
-              <h3 className="text-lg font-black text-slate-900 tracking-tight">
-                Delete Class Entirely?
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Are you sure you want to permanently delete{" "}
-                <b className="text-slate-900 font-mono">
-                  {subject.subjectCode} - {subject.title}
-                </b>
-                ?
-              </p>
-            </div>
-
-            <div className="p-3 bg-rose-50/70 border border-rose-200 text-xs text-rose-900 leading-relaxed font-medium space-y-1">
-              <div className="font-bold text-rose-950 uppercase tracking-wider text-[10px]">
-                Permanent Cascade Action:
-              </div>
-              <ul className="list-disc list-inside text-[11px] space-y-0.5">
-                <li>All <b>{subject.enrollments?.length || 0} enrolled students</b> will be removed.</li>
-                <li>All <b>{subject.quizzes?.length || 0} quizzes</b> and student exam submissions will be deleted.</li>
-              </ul>
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={deletingSubject}
-                className="flat-button-secondary text-xs py-2 px-3.5"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteSubjectEntirely}
-                disabled={deletingSubject}
-                className="flat-button-danger text-xs py-2 px-4 font-bold flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{deletingSubject ? "Deleting Class..." : "Yes, Delete Class"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmation: Delete Subject */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Delete Entire Class Section"
+        message={`Are you sure you want to delete '${subject.subjectCode}' (${subject.title})? All student enrollments, quizzes, and grade records will be permanently deleted.`}
+        confirmText={deletingSubject ? "Deleting..." : "Delete Class"}
+        isDestructive={true}
+        onConfirm={handleDeleteSubject}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </div>
   );
 }

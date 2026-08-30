@@ -12,26 +12,40 @@ import {
   AlertCircle,
   Clock,
   BookOpen,
+  RefreshCw,
 } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/Skeleton";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { useToast } from "@/components/ui/ToastContext";
 
 export default function AdminFacultyApprovalsPage() {
   const { data: session } = useSession();
+  const toast = useToast();
   const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+
+  // Deletion modal
+  const [teacherToDelete, setTeacherToDelete] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchTeachers = async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch("/api/teacher/admin/teachers");
-      if (!res.ok) throw new Error("Failed to load faculty accounts.");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to load faculty accounts.");
+      }
       const data = await res.json();
       setTeachers(data.teachers || []);
     } catch (err: any) {
       setError(err.message);
+      toast.error("Error", err.message);
     } finally {
       setLoading(false);
     }
@@ -41,11 +55,8 @@ export default function AdminFacultyApprovalsPage() {
     fetchTeachers();
   }, []);
 
-  const handleToggleApproval = async (teacherId: string, currentApproved: boolean) => {
+  const handleToggleApproval = async (teacherId: string, currentApproved: boolean, teacherName: string) => {
     try {
-      setError(null);
-      setSuccessMsg(null);
-
       const res = await fetch("/api/teacher/admin/teachers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -55,297 +66,263 @@ export default function AdminFacultyApprovalsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update status.");
 
-      setSuccessMsg(
-        !currentApproved
-          ? `Faculty account approved! They can now access WebQuiz.`
-          : `Faculty account access has been revoked.`
-      );
+      if (!currentApproved) {
+        toast.success("Faculty Approved", `${teacherName} can now access WebQuiz.`);
+      } else {
+        toast.warning("Access Suspended", `${teacherName}'s access was suspended.`);
+      }
+
       fetchTeachers();
     } catch (err: any) {
-      setError(err.message);
+      toast.error("Action Failed", err.message);
     }
   };
 
-  const handleDeleteTeacher = async (teacher: any) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete ${teacher.name} (${teacher.email})? This will delete all classes and quizzes they created.`
-      )
-    ) {
-      return;
-    }
+  const confirmDeleteTeacher = async () => {
+    if (!teacherToDelete) return;
+    setDeleting(true);
 
     try {
-      setError(null);
-      setSuccessMsg(null);
-
-      const res = await fetch(`/api/teacher/admin/teachers?teacherId=${teacher.id}`, {
+      const res = await fetch(`/api/teacher/admin/teachers?id=${teacherToDelete.id}`, {
         method: "DELETE",
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete teacher.");
 
-      setSuccessMsg(`Teacher account ${teacher.email} removed.`);
+      toast.success("Account Removed", `${teacherToDelete.name}'s account and classes were deleted.`);
+      setTeacherToDelete(null);
       fetchTeachers();
     } catch (err: any) {
-      setError(err.message);
+      toast.error("Deletion Error", err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const pendingCount = teachers.filter((t) => !t.isApproved).length;
-  const approvedCount = teachers.filter((t) => t.isApproved).length;
-
   const filteredTeachers = teachers.filter((t) => {
+    const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.email.toLowerCase().includes(searchQuery.toLowerCase());
+      t.name.toLowerCase().includes(query) ||
+      t.email.toLowerCase().includes(query) ||
+      t.role.toLowerCase().includes(query);
 
     if (filterStatus === "PENDING") return matchesSearch && !t.isApproved;
     if (filterStatus === "APPROVED") return matchesSearch && t.isApproved;
     return matchesSearch;
   });
 
+  const pendingCount = teachers.filter((t) => !t.isApproved).length;
+
   return (
-    <div className="p-6 sm:p-8 space-y-8 max-w-7xl">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-w-7xl">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="flat-badge-amber font-mono text-xs font-bold">
-              Developer Administration
-            </span>
-            <span className="text-xs text-slate-500 font-semibold">
-              Security & Whitelisting
+            <span className="flat-badge-amber font-mono text-xs font-bold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" />
+              <span>Developer Superadmin Console</span>
             </span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Faculty Access &amp; Approvals
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            Faculty Access & Approvals
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Authorize or revoke faculty accounts signing in via Google. Unapproved teachers cannot view or create quizzes.
+            Authorize faculty Gmail accounts to create classes and publish quizzes.
           </p>
         </div>
-      </div>
 
-      {/* Notifications */}
-      {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="flat-card bg-white p-5 border border-slate-200">
-          <div className="text-slate-500 text-xs font-bold uppercase tracking-wider">
-            Total Registered Faculty
-          </div>
-          <div className="text-3xl font-black text-slate-900 mt-1 font-mono">
-            {teachers.length}
-          </div>
-        </div>
-
-        <div className="flat-card bg-amber-50 p-5 border border-amber-200">
-          <div className="text-amber-800 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Pending Authorization</span>
-          </div>
-          <div className="text-3xl font-black text-amber-900 mt-1 font-mono">
-            {pendingCount}
-          </div>
-        </div>
-
-        <div className="flat-card bg-emerald-50 p-5 border border-emerald-200">
-          <div className="text-emerald-800 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Active & Approved</span>
-          </div>
-          <div className="text-3xl font-black text-emerald-900 mt-1 font-mono">
-            {approvedCount}
-          </div>
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <div className="flat-card px-3 py-1.5 bg-amber-50 border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+              <span>{pendingCount} Pending Approval</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-        <div className="flex items-center gap-2 text-xs">
-          <button
-            onClick={() => setFilterStatus("ALL")}
-            className={`px-3 py-1.5 font-bold border transition-colors ${
-              filterStatus === "ALL"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            All ({teachers.length})
-          </button>
-          <button
-            onClick={() => setFilterStatus("PENDING")}
-            className={`px-3 py-1.5 font-bold border transition-colors ${
-              filterStatus === "PENDING"
-                ? "bg-amber-600 text-white border-amber-600"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            Pending ({pendingCount})
-          </button>
-          <button
-            onClick={() => setFilterStatus("APPROVED")}
-            className={`px-3 py-1.5 font-bold border transition-colors ${
-              filterStatus === "APPROVED"
-                ? "bg-emerald-600 text-white border-emerald-600"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            Approved ({approvedCount})
-          </button>
-        </div>
-
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+      {/* Filter and Search Controls */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
+            placeholder="Search by faculty name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search name or university email..."
-            className="flat-input text-xs pl-8 py-1.5 w-full sm:w-72"
+            className="flat-input text-xs pl-9 py-2 w-full"
           />
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="inline-flex border border-slate-200 bg-white p-0.5">
+            <button
+              onClick={() => setFilterStatus("ALL")}
+              className={`px-3 py-1 text-xs font-bold transition-colors ${
+                filterStatus === "ALL"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              All ({teachers.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("PENDING")}
+              className={`px-3 py-1 text-xs font-bold transition-colors ${
+                filterStatus === "PENDING"
+                  ? "bg-amber-600 text-white"
+                  : "text-amber-700 hover:text-amber-900"
+              }`}
+            >
+              Pending ({pendingCount})
+            </button>
+            <button
+              onClick={() => setFilterStatus("APPROVED")}
+              className={`px-3 py-1 text-xs font-bold transition-colors ${
+                filterStatus === "APPROVED"
+                  ? "bg-emerald-600 text-white"
+                  : "text-emerald-700 hover:text-emerald-900"
+              }`}
+            >
+              Approved ({teachers.length - pendingCount})
+            </button>
+          </div>
+
+          <button
+            onClick={fetchTeachers}
+            className="flat-button-secondary text-xs py-2 px-2.5"
+            title="Refresh list"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 
-      {/* Teachers Table */}
-      <div className="flat-card bg-white border border-slate-200 overflow-hidden shadow-xs">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
-            <tr>
-              <th className="px-4 py-3">Faculty Member</th>
-              <th className="px-4 py-3">Email Address</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Classes</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-medium">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-mono">
-                  Loading faculty accounts...
-                </td>
-              </tr>
-            ) : filteredTeachers.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  No faculty accounts found matching filter.
-                </td>
-              </tr>
-            ) : (
-              filteredTeachers.map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      {teacher.avatar ? (
-                        <img
-                          src={teacher.avatar}
-                          alt={teacher.name}
-                          className="w-7 h-7 rounded-full border border-slate-200 object-cover"
-                        />
-                      ) : (
-                        <div className="w-7 h-7 bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
-                          {teacher.name.charAt(0)}
-                        </div>
-                      )}
-                      <span className="font-bold text-slate-900">{teacher.name}</span>
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3 font-mono text-slate-600">
-                    {teacher.email}
-                  </td>
-
-                  <td className="px-4 py-3">
-                    {teacher.role === "ADMIN" ? (
-                      <span className="flat-badge-amber text-[10px] font-bold">
-                        Developer / Admin
-                      </span>
-                    ) : (
-                      <span className="flat-badge-indigo text-[10px]">
-                        Teacher
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3 font-mono text-slate-700">
-                    {teacher._count?.subjects || 0} classes
-                  </td>
-
-                  <td className="px-4 py-3">
-                    {teacher.isApproved ? (
-                      <span className="flat-badge-emerald text-[10px] flex items-center gap-1 w-fit">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Approved</span>
-                      </span>
-                    ) : (
-                      <span className="flat-badge-amber text-[10px] flex items-center gap-1 w-fit">
-                        <Clock className="w-3 h-3" />
-                        <span>Pending Approval</span>
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {teacher.role !== "ADMIN" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleApproval(teacher.id, teacher.isApproved)}
-                            className={`text-xs py-1 px-2.5 font-bold border transition-colors flex items-center gap-1 ${
-                              teacher.isApproved
-                                ? "border-slate-300 text-slate-700 hover:bg-slate-100"
-                                : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
-                            }`}
-                          >
-                            {teacher.isApproved ? (
-                              <>
-                                <UserX className="w-3 h-3 text-slate-500" />
-                                <span>Revoke</span>
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck className="w-3 h-3" />
-                                <span>Approve Access</span>
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTeacher(teacher)}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                            title="Delete Account"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
+      {/* Faculty Accounts Table */}
+      {loading ? (
+        <TableSkeleton rows={6} columns={5} />
+      ) : filteredTeachers.length === 0 ? (
+        <div className="flat-card p-12 text-center bg-white border border-slate-200">
+          <UserCheck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <h3 className="font-bold text-slate-900 text-sm">No faculty records found</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            {searchQuery
+              ? `No teachers match '${searchQuery}'.`
+              : "When teachers sign in with their Google account, their profile will appear here for approval."}
+          </p>
+        </div>
+      ) : (
+        <div className="flat-card bg-white overflow-hidden border border-slate-200 shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 font-bold text-slate-700">Faculty Member</th>
+                  <th className="px-4 py-3 font-bold text-slate-700">Role</th>
+                  <th className="px-4 py-3 font-bold text-slate-700">Status</th>
+                  <th className="px-4 py-3 font-bold text-slate-700">Classes Owned</th>
+                  <th className="px-4 py-3 font-bold text-slate-700">Registered On</th>
+                  <th className="px-4 py-3 text-right font-bold text-slate-700">Actions</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-sans">
+                {filteredTeachers.map((t) => {
+                  const isSuperAdmin = t.email === "lummartin@nemsu.edu.ph";
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-none bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 font-mono">
+                            {t.name?.charAt(0)?.toUpperCase() || "F"}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{t.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">
+                              <CopyButton text={t.email} />
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5">
+                        {t.role === "ADMIN" ? (
+                          <span className="flat-badge-amber font-mono font-bold">SUPERADMIN</span>
+                        ) : (
+                          <span className="flat-badge-indigo font-mono">TEACHER</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5">
+                        {t.isApproved ? (
+                          <span className="flat-badge-emerald font-semibold flex items-center gap-1 w-fit">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Approved</span>
+                          </span>
+                        ) : (
+                          <span className="flat-badge-amber font-semibold flex items-center gap-1 w-fit">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 font-mono text-slate-700">
+                        {t._count?.subjects || 0} class sections
+                      </td>
+
+                      <td className="px-4 py-3.5 text-slate-400 font-mono">
+                        {new Date(t.createdAt).toLocaleDateString()}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {isSuperAdmin ? (
+                            <span className="text-[11px] text-slate-400 italic">Protected</span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleToggleApproval(t.id, t.isApproved, t.name)}
+                                className={`text-xs py-1 px-2.5 font-bold border transition-colors ${
+                                  t.isApproved
+                                    ? "border-rose-200 text-rose-700 hover:bg-rose-50"
+                                    : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                                }`}
+                              >
+                                {t.isApproved ? "Revoke Access" : "Approve Faculty"}
+                              </button>
+
+                              <button
+                                onClick={() => setTeacherToDelete({ id: t.id, name: t.name, email: t.email })}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                title="Delete Teacher"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Deletion Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!teacherToDelete}
+        title="Delete Teacher Account"
+        message={`Are you sure you want to delete ${teacherToDelete?.name} (${teacherToDelete?.email})? All associated classes, quizzes, and rosters created by this teacher will be permanently deleted.`}
+        confirmText={deleting ? "Deleting..." : "Delete Account"}
+        isDestructive={true}
+        onConfirm={confirmDeleteTeacher}
+        onCancel={() => setTeacherToDelete(null)}
+      />
     </div>
   );
 }
