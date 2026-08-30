@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "lummartin@nemsu.edu.ph").toLowerCase().trim();
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,75 +12,69 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const email = session.user.email.toLowerCase().trim();
-    const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
+    const teacherId = session.user.id;
+    const isApproved = (session.user as any).isApproved;
 
-    // Self-healing teacher lookup / creation
-    let teacher = await prisma.teacher.findUnique({
-      where: { email },
-    });
-
-    if (!teacher) {
-      teacher = await prisma.teacher.create({
-        data: {
-          email,
-          name: session.user.name || "Faculty Member",
-          avatar: session.user.image,
-          role: isAdmin ? "ADMIN" : "TEACHER",
-          isApproved: isAdmin ? true : false,
-        },
-      });
-    }
-
-    if (!teacher.isApproved) {
+    if (!isApproved) {
       return NextResponse.json({ error: "Pending approval", isApproved: false }, { status: 403 });
     }
 
-    // Multi-tenant: Only fetch classes belonging strictly to THIS teacher
-    const subjects = await prisma.subject.findMany({
-      where: { teacherId: teacher.id },
-      include: {
-        _count: {
-          select: { enrollments: true, quizzes: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // Fetch quizzes belonging to this teacher
-    const quizzes = await prisma.quiz.findMany({
-      where: {
-        subject: { teacherId: teacher.id },
-      },
-      include: {
-        subject: { select: { subjectCode: true, title: true } },
-        questions: { select: { points: true } },
-        submissions: {
-          select: {
-            id: true,
-            score: true,
-            status: true,
-            violationCount: true,
+    // Run queries in parallel to cut latency in half
+    const [subjects, quizzes] = await Promise.all([
+      prisma.subject.findMany({
+        where: { teacherId },
+        select: {
+          id: true,
+          _count: {
+            select: { enrollments: true, quizzes: true },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+      }),
+      prisma.quiz.findMany({
+        where: {
+          subject: { teacherId },
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          durationMinutes: true,
+          isPublished: true,
+          subject: {
+            select: { subjectCode: true },
+          },
+          questions: {
+            select: { points: true },
+          },
+          submissions: {
+            select: {
+              status: true,
+              violationCount: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
 
     const totalEnrollments = subjects.reduce((sum, s) => sum + s._count.enrollments, 0);
     const totalQuizzes = quizzes.length;
-    const totalSubmissions = quizzes.reduce((sum, q) => sum + q.submissions.length, 0);
-    const totalViolations = quizzes.reduce(
-      (sum, q) => sum + q.submissions.reduce((vSum, sub) => vSum + sub.violationCount, 0),
-      0
-    );
+    let totalSubmissions = 0;
+    let totalViolations = 0;
 
     const formattedQuizzes = quizzes.map((q) => {
       const totalPoints = q.questions.reduce((sum, item) => sum + item.points, 0);
-      const completedCount = q.submissions.filter(
-        (s) => s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED"
-      ).length;
-      const violations = q.submissions.reduce((sum, s) => sum + s.violationCount, 0);
+      let completedCount = 0;
+      let qViolations = 0;
+
+      for (const sub of q.submissions) {
+        totalSubmissions++;
+        totalViolations += sub.violationCount;
+        qViolations += sub.violationCount;
+        if (sub.status === "SUBMITTED" || sub.status === "AUTO_SUBMITTED") {
+          completedCount++;
+        }
+      }
 
       return {
         id: q.id,
@@ -92,28 +86,35 @@ export async function GET(req: NextRequest) {
         totalQuestions: q.questions.length,
         totalPoints,
         completedCount,
-        violations,
+        violations: qViolations,
       };
     });
 
-    return NextResponse.json({
-      teacher: {
-        id: teacher.id,
-        name: teacher.name,
-        email: teacher.email,
-        role: teacher.role,
-        isApproved: teacher.isApproved,
+    return NextResponse.json(
+      {
+        teacher: {
+          id: session.user.id,
+          name: session.user.name || "Faculty Member",
+          email: session.user.email,
+          role: (session.user as any).role || "TEACHER",
+          isApproved: true,
+        },
+        stats: {
+          activeClasses: subjects.length,
+          totalEnrollments,
+          totalQuizzes,
+          publishedQuizzes: quizzes.filter((q) => q.isPublished).length,
+          totalSubmissions,
+          totalViolations,
+        },
+        quizzes: formattedQuizzes,
       },
-      stats: {
-        activeClasses: subjects.length,
-        totalEnrollments,
-        totalQuizzes,
-        publishedQuizzes: quizzes.filter((q) => q.isPublished).length,
-        totalSubmissions,
-        totalViolations,
-      },
-      quizzes: formattedQuizzes,
-    });
+      {
+        headers: {
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Dashboard API Error:", error);
     return NextResponse.json(

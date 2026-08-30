@@ -39,7 +39,7 @@ export default function TeacherSidebar({
         })
         .catch(() => {});
     }
-  }, [isAdmin, pathname]);
+  }, [isAdmin]);
 
   // Close mobile drawer on route change
   useEffect(() => {

@@ -3,28 +3,30 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const teacherId = session?.user?.id;
+  const isApproved = (session?.user as any)?.isApproved;
+
+  if (!teacherId || !session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
-  });
-
-  if (!teacher) {
-    return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
-  }
-
-  if (!teacher.isApproved) {
+  if (!isApproved) {
     return NextResponse.json({ error: "Account pending administrator approval" }, { status: 403 });
   }
 
   // Multi-tenant isolation: Only fetch classes belonging strictly to THIS teacher
   const subjects = await prisma.subject.findMany({
-    where: { teacherId: teacher.id },
-    include: {
+    where: { teacherId },
+    select: {
+      id: true,
+      subjectCode: true,
+      title: true,
+      description: true,
+      createdAt: true,
       _count: {
         select: {
           enrollments: true,
@@ -35,24 +37,21 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ subjects });
+  return NextResponse.json({ subjects }, {
+    headers: { "Cache-Control": "private, no-cache, no-store, must-revalidate" },
+  });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const teacherId = session?.user?.id;
+  const isApproved = (session?.user as any)?.isApproved;
+
+  if (!teacherId || !session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
-  });
-
-  if (!teacher) {
-    return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
-  }
-
-  if (!teacher.isApproved) {
+  if (!isApproved) {
     return NextResponse.json({ error: "Account pending administrator approval" }, { status: 403 });
   }
 
@@ -73,10 +72,11 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.subject.findUnique({
       where: {
         teacherId_subjectCode: {
-          teacherId: teacher.id,
+          teacherId,
           subjectCode: cleanCode,
         },
       },
+      select: { id: true },
     });
 
     if (existing) {
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     const subject = await prisma.subject.create({
       data: {
-        teacherId: teacher.id,
+        teacherId,
         subjectCode: cleanCode,
         title: title.trim(),
         description: description?.trim() || null,

@@ -3,17 +3,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const teacherId = session?.user?.id;
+  const isApproved = (session?.user as any)?.isApproved;
+
+  if (!teacherId || !session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
-  });
-
-  if (!teacher || !teacher.isApproved) {
+  if (!isApproved) {
     return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
@@ -21,10 +22,21 @@ export async function GET() {
   const quizzes = await prisma.quiz.findMany({
     where: {
       subject: {
-        teacherId: teacher.id,
+        teacherId,
       },
     },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      durationMinutes: true,
+      maxViolations: true,
+      isPublished: true,
+      shuffleQuestions: true,
+      shuffleChoices: true,
+      deadlineAt: true,
+      startAt: true,
+      createdAt: true,
       subject: {
         select: {
           id: true,
@@ -40,7 +52,6 @@ export async function GET() {
         select: {
           id: true,
           score: true,
-          totalPoints: true,
           status: true,
           violationCount: true,
         },
@@ -51,18 +62,19 @@ export async function GET() {
 
   const formatted = quizzes.map((q) => {
     const totalPoints = q.questions.reduce((sum, item) => sum + item.points, 0);
-    const completedSubmissions = q.submissions.filter(
-      (s) => s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED"
-    );
-    const avgScore =
-      completedSubmissions.length > 0
-        ? completedSubmissions.reduce((sum, s) => sum + s.score, 0) /
-          completedSubmissions.length
-        : 0;
-    const totalViolations = q.submissions.reduce(
-      (sum, s) => sum + s.violationCount,
-      0
-    );
+    let completedCount = 0;
+    let totalViolations = 0;
+    let scoreSum = 0;
+
+    for (const s of q.submissions) {
+      totalViolations += s.violationCount;
+      if (s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED") {
+        completedCount++;
+        scoreSum += s.score;
+      }
+    }
+
+    const avgScore = completedCount > 0 ? scoreSum / completedCount : 0;
 
     return {
       id: q.id,
@@ -82,27 +94,28 @@ export async function GET() {
       totalQuestions: q.questions.length,
       totalPoints,
       submissionCount: q.submissions.length,
-      completedCount: completedSubmissions.length,
+      completedCount,
       averageScore: avgScore,
       totalViolations,
       createdAt: q.createdAt,
     };
   });
 
-  return NextResponse.json({ quizzes: formatted });
+  return NextResponse.json({ quizzes: formatted }, {
+    headers: { "Cache-Control": "private, no-cache, no-store, must-revalidate" },
+  });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const teacherId = session?.user?.id;
+  const isApproved = (session?.user as any)?.isApproved;
+
+  if (!teacherId || !session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
-  });
-
-  if (!teacher || !teacher.isApproved) {
+  if (!isApproved) {
     return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
@@ -131,7 +144,8 @@ export async function POST(req: NextRequest) {
 
     // Verify the target subject is owned by THIS teacher
     const subject = await prisma.subject.findFirst({
-      where: { id: subjectId, teacherId: teacher.id },
+      where: { id: subjectId, teacherId },
+      select: { id: true },
     });
 
     if (!subject) {
@@ -157,36 +171,27 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Create Questions
-    if (questions && Array.isArray(questions)) {
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        await prisma.question.create({
-          data: {
-            quizId: quiz.id,
-            type: q.type || "MULTIPLE_CHOICE",
-            prompt: q.prompt?.trim() || "Untitled Question",
-            points: Number(q.points) || 1,
-            options: JSON.stringify(q.options || []),
-            correctAnswers: JSON.stringify(q.correctAnswers || []),
-            isCaseSensitive: !!q.isCaseSensitive,
-            allowFuzzy: !!q.allowFuzzy,
-            fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
-            orderIndex: i,
-          },
-        });
-      }
+    // Bulk insert questions in a single query for maximum performance
+    if (questions && Array.isArray(questions) && questions.length > 0) {
+      const questionRecords = questions.map((q, i) => ({
+        quizId: quiz.id,
+        type: q.type || "MULTIPLE_CHOICE",
+        prompt: q.prompt?.trim() || "Untitled Question",
+        points: Number(q.points) || 1,
+        options: JSON.stringify(q.options || []),
+        correctAnswers: JSON.stringify(q.correctAnswers || []),
+        isCaseSensitive: !!q.isCaseSensitive,
+        allowFuzzy: !!q.allowFuzzy,
+        fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
+        orderIndex: i,
+      }));
+
+      await prisma.question.createMany({
+        data: questionRecords,
+      });
     }
 
-    const createdQuiz = await prisma.quiz.findUnique({
-      where: { id: quiz.id },
-      include: {
-        questions: { orderBy: { orderIndex: "asc" } },
-        subject: true,
-      },
-    });
-
-    return NextResponse.json({ quiz: createdQuiz }, { status: 201 });
+    return NextResponse.json({ quiz }, { status: 201 });
   } catch (error) {
     console.error("Create quiz error:", error);
     return NextResponse.json({ error: "Failed to create quiz" }, { status: 500 });
