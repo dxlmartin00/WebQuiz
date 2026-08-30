@@ -1,0 +1,125 @@
+// Prisma schema for WebQuiz Application
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Teacher {
+  id        String    @id @default(cuid())
+  name      String
+  email     String    @unique
+  googleId  String?   @unique
+  avatar    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  subjects  Subject[]
+}
+
+model Subject {
+  id          String       @id @default(cuid())
+  teacherId   String
+  teacher     Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectCode String       @unique
+  title       String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  enrollments Enrollment[]
+  quizzes     Quiz[]
+}
+
+model Enrollment {
+  id              String   @id @default(cuid())
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentIdNumber String
+  studentName     String
+  createdAt       DateTime @default(now())
+
+  @@unique([subjectId, studentIdNumber])
+  @@index([studentIdNumber])
+}
+
+model Quiz {
+  id               String       @id @default(cuid())
+  subjectId        String
+  subject          Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  durationMinutes  Int          @default(30)
+  startAt          DateTime?
+  deadlineAt       DateTime?
+  maxViolations    Int          @default(3)
+  isPublished      Boolean      @default(false)
+  shuffleQuestions Boolean      @default(false)
+  shuffleChoices   Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  questions        Question[]
+  submissions      Submission[]
+}
+
+model Question {
+  id              String             @id @default(cuid())
+  quizId          String
+  quiz            Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type            String             // "MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER"
+  prompt          String
+  points          Int                @default(1)
+  options         String             @default("[]") // JSON string of choices array
+  correctAnswers  String             @default("[]") // JSON string of valid answer strings / synonyms
+  isCaseSensitive Boolean            @default(false)
+  allowFuzzy      Boolean            @default(false)
+  fuzzyThreshold  Int                @default(1) // Max Levenshtein distance allowed
+  orderIndex      Int                @default(0)
+  answers         SubmissionAnswer[]
+}
+
+model Submission {
+  id              String             @id @default(cuid())
+  quizId          String
+  quiz            Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentIdNumber String
+  studentName     String?
+  score           Float              @default(0)
+  totalPoints     Int                @default(0)
+  startedAt       DateTime           @default(now())
+  submittedAt     DateTime?
+  violationCount  Int                @default(0)
+  status          String             @default("IN_PROGRESS") // "IN_PROGRESS", "SUBMITTED", "AUTO_SUBMITTED", "DISQUALIFIED"
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  answers         SubmissionAnswer[]
+  violationLogs   ViolationLog[]
+
+  @@index([studentIdNumber])
+  @@index([quizId, studentIdNumber])
+}
+
+model SubmissionAnswer {
+  id             String     @id @default(cuid())
+  submissionId   String
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  studentAnswer  String     @default("")
+  isCorrect      Boolean    @default(false)
+  pointsAwarded  Float      @default(0)
+  matchType      String?    // "EXACT", "SYNONYM", "FUZZY", "INCORRECT"
+
+  @@unique([submissionId, questionId])
+}
+
+model ViolationLog {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  eventType    String     // "TAB_SWITCH", "WINDOW_BLUR", "FULLSCREEN_EXIT", "CLIPBOARD_ATTEMPT", "DEVTOOLS_ATTEMPT"
+  details      String?
+  timestamp    DateTime   @default(now())
+}

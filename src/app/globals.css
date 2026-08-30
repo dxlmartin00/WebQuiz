@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Modern Flat UI Component Classes */
+@layer components {
+  .flat-card {
+    @apply bg-white border border-slate-200 rounded-none shadow-none;
+  }
+  
+  .flat-card-hover {
+    @apply bg-white border border-slate-200 rounded-none transition-all duration-150 hover:border-slate-400;
+  }
+
+  .flat-button-primary {
+    @apply inline-flex items-center justify-center font-medium px-4 py-2 bg-indigo-600 text-white rounded-none border border-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .flat-button-secondary {
+    @apply inline-flex items-center justify-center font-medium px-4 py-2 bg-white text-slate-800 rounded-none border border-slate-300 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .flat-button-danger {
+    @apply inline-flex items-center justify-center font-medium px-4 py-2 bg-rose-600 text-white rounded-none border border-rose-600 hover:bg-rose-700 active:bg-rose-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .flat-button-dark {
+    @apply inline-flex items-center justify-center font-medium px-4 py-2 bg-slate-900 text-white rounded-none border border-slate-900 hover:bg-slate-800 active:bg-slate-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .flat-input {
+    @apply w-full px-3 py-2 bg-white border border-slate-300 rounded-none text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 text-sm transition-colors;
+  }
+
+  .flat-badge-indigo {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200;
+  }
+
+  .flat-badge-emerald {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200;
+  }
+
+  .flat-badge-amber {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .flat-badge-rose {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200;
+  }
+
+  .flat-badge-slate {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300;
+  }
+}
+
+/* Exam Room Anti-Cheating Lockout Utility */
+.exam-lockdown {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.exam-lockdown * {
+  -webkit-touch-callout: none;
+}
+
+/* Custom scrollbar for crisp flat look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
