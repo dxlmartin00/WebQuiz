@@ -28,7 +28,6 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"ACTIVE" | "UPCOMING" | "COMPLETED">("ACTIVE");
-  const [searchQuery, setSearchQuery] = useState("");
 
   const loadData = async () => {
     try {
@@ -57,34 +56,15 @@ export default function StudentDashboardPage() {
     loadData();
   }, [router]);
 
-  const student = data?.student || { studentIdNumber: "", name: "" };
-  const subjects = data?.subjects || [];
-  const quizzes = data?.quizzes || [];
-  const submissions = data?.submissions || [];
-
-  const now = new Date();
-
-  const activeQuizzes = quizzes.filter((q: any) => {
-    const isSubmitted = submissions.some(
-      (s: any) => s.quizId === q.id && (s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED")
-    );
-    if (isSubmitted) return false;
-    const deadlineValid = !q.deadlineAt || new Date(q.deadlineAt) > now;
-    const startValid = !q.startAt || new Date(q.startAt) <= now;
-    return deadlineValid && startValid;
-  });
-
-  const upcomingQuizzes = quizzes.filter((q: any) => {
-    return q.startAt && new Date(q.startAt) > now;
-  });
-
-  const completedSubmissions = submissions.filter(
-    (s: any) => s.status === "SUBMITTED" || s.status === "AUTO_SUBMITTED"
-  );
+  const student = data?.student || { studentIdNumber: "", studentName: "" };
+  const subjects = data?.enrolledSubjects || data?.subjects || [];
+  const activeQuizzes = data?.activeQuizzes || [];
+  const upcomingQuizzes = data?.upcomingQuizzes || [];
+  const completedQuizzes = data?.completedQuizzes || [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <StudentHeader studentName={student.name} studentIdNumber={student.studentIdNumber} />
+      <StudentHeader studentName={student.studentName || student.name} studentIdNumber={student.studentIdNumber} />
 
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
         {/* Welcome Card */}
@@ -97,7 +77,7 @@ export default function StudentDashboardPage() {
               <CopyButton text={student.studentIdNumber} className="bg-slate-800 text-slate-300 border-slate-700" />
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-              Welcome, {student.name || "Student"}
+              Welcome, {student.studentName || student.name || "Student"}
             </h1>
             <p className="text-xs text-slate-400">
               Enrolled in {subjects.length} class {subjects.length === 1 ? "section" : "sections"}.
@@ -142,7 +122,7 @@ export default function StudentDashboardPage() {
                   Completed Exams
                 </span>
                 <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-2 font-mono">
-                  {completedSubmissions.length}
+                  {completedQuizzes.length}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1 font-medium">
                   Auto-graded & recorded
@@ -195,7 +175,7 @@ export default function StudentDashboardPage() {
                   : "border-transparent text-slate-500 hover:text-slate-900"
               }`}
             >
-              Submission History ({completedSubmissions.length})
+              Submission History ({completedQuizzes.length})
             </button>
           </div>
 
@@ -223,19 +203,19 @@ export default function StudentDashboardPage() {
                   >
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <CopyButton text={q.subject.subjectCode} />
+                        <CopyButton text={q.subjectCode} />
                         <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" /> {q.durationMinutes} minutes
                         </span>
                         <span className="text-xs text-slate-500">
-                          {q._count?.questions || 0} Questions
+                          {q.totalQuestions} Questions ({q.totalPoints} pts)
                         </span>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-base">
+                      <h2 className="font-bold text-slate-900 text-base">
                         {q.title}
-                      </h3>
+                      </h2>
                       <p className="text-xs text-slate-500 truncate max-w-2xl">
-                        {q.description || `${q.subject.title} Assessment`}
+                        {q.description || `${q.subjectTitle} Assessment`}
                       </p>
                     </div>
 
@@ -270,10 +250,10 @@ export default function StudentDashboardPage() {
                   >
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <CopyButton text={q.subject.subjectCode} />
+                        <CopyButton text={q.subjectCode} />
                         <span className="flat-badge-amber text-[11px]">Scheduled</span>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-base">{q.title}</h3>
+                      <h2 className="font-bold text-slate-900 text-base">{q.title}</h2>
                       <p className="text-xs text-slate-500">
                         Opens on: <span className="font-semibold text-slate-700">{new Date(q.startAt).toLocaleString()}</span>
                       </p>
@@ -283,7 +263,7 @@ export default function StudentDashboardPage() {
               </div>
             )
           ) : (
-            completedSubmissions.length === 0 ? (
+            completedQuizzes.length === 0 ? (
               <div className="flat-card p-12 text-center bg-white border border-slate-200">
                 <Award className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                 <h3 className="font-bold text-slate-900 text-sm">No submission records yet</h3>
@@ -293,39 +273,44 @@ export default function StudentDashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
-                {completedSubmissions.map((s: any) => (
-                  <div
-                    key={s.id}
-                    className="flat-card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="flat-badge-emerald text-[11px] font-bold">COMPLETED</span>
-                        <span className="text-xs text-slate-400 font-mono">
-                          Submitted on {new Date(s.submittedAt || s.createdAt).toLocaleDateString()}
-                        </span>
+                {completedQuizzes.map((q: any) => {
+                  const s = q.submission;
+                  return (
+                    <div
+                      key={q.id}
+                      className="flat-card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="flat-badge-emerald text-[11px] font-bold">COMPLETED</span>
+                          {s?.submittedAt && (
+                            <span className="text-xs text-slate-400 font-mono">
+                              Submitted on {new Date(s.submittedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="font-bold text-slate-900 text-base">
+                          {q.title}
+                        </h2>
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          <span>Subject: <strong className="text-slate-700">{q.subjectCode}</strong></span>
+                          {s?.violationCount > 0 && (
+                            <span className="text-rose-600 font-semibold flex items-center gap-1">
+                              <ShieldAlert className="w-3 h-3" /> {s.violationCount} Integrity Flags
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-base">
-                        {s.quiz?.title || "Quiz Submission"}
-                      </h3>
-                      <div className="flex items-center gap-3 text-xs text-slate-500">
-                        <span>Subject: <strong className="text-slate-700">{s.quiz?.subject?.subjectCode}</strong></span>
-                        {s.violationCount > 0 && (
-                          <span className="text-rose-600 font-semibold flex items-center gap-1">
-                            <ShieldAlert className="w-3 h-3" /> {s.violationCount} Integrity Flags
-                          </span>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="text-left md:text-right border-t md:border-t-0 pt-3 md:pt-0">
-                      <div className="text-xs text-slate-500 font-semibold">FINAL SCORE</div>
-                      <div className="text-2xl font-black text-slate-900 font-mono">
-                        {s.score} <span className="text-sm font-normal text-slate-400">/ {s.totalPoints}</span>
+                      <div className="text-left md:text-right border-t md:border-t-0 pt-3 md:pt-0">
+                        <div className="text-xs text-slate-500 font-semibold">FINAL SCORE</div>
+                        <div className="text-2xl font-black text-slate-900 font-mono">
+                          {s?.score ?? 0} <span className="text-sm font-normal text-slate-400">/ {s?.totalPoints ?? q.totalPoints}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           )}

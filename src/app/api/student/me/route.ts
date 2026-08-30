@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await getStudentSession();
 
-  if (!session) {
+  if (!session?.studentIdNumber) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -57,6 +59,7 @@ export async function GET() {
         id: quiz.id,
         title: quiz.title,
         description: quiz.description,
+        subjectId: enrollment.subject.id,
         subjectCode: enrollment.subject.subjectCode,
         subjectTitle: enrollment.subject.title,
         durationMinutes: quiz.durationMinutes,
@@ -95,14 +98,20 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({
-    student: {
-      studentIdNumber: session.studentIdNumber,
-      studentName: session.studentName,
+  return NextResponse.json(
+    {
+      student: {
+        studentIdNumber: session.studentIdNumber,
+        studentName: session.studentName,
+      },
+      subjects: enrolledSubjects,
+      enrolledSubjects,
+      activeQuizzes,
+      upcomingQuizzes,
+      completedQuizzes,
     },
-    enrolledSubjects,
-    activeQuizzes,
-    upcomingQuizzes,
-    completedQuizzes,
-  });
+    {
+      headers: { "Cache-Control": "private, no-cache, no-store, must-revalidate" },
+    }
+  );
 }
