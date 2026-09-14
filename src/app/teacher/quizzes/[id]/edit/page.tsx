@@ -11,9 +11,11 @@ import {
   ShieldAlert,
   Save,
   AlertCircle,
+  FileUp,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
+import { DocxImportModal } from "@/components/teacher/DocxImportModal";
 
 export default function EditQuizPage({
   params,
@@ -36,6 +38,7 @@ export default function EditQuizPage({
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [isDocxModalOpen, setIsDocxModalOpen] = useState(false);
 
   useEffect(() => {
     async function loadQuiz() {
@@ -132,6 +135,14 @@ export default function EditQuizPage({
   const removeQuestion = (index: number) => {
     if (questions.length <= 1) return;
     setQuestions(questions.filter((_, i) => i !== index));
+  };
+
+  const handleImportQuestions = (importedQuestions: QuestionDraft[], mode: "append" | "replace") => {
+    if (mode === "replace") {
+      setQuestions(importedQuestions);
+    } else {
+      setQuestions((prev) => [...prev, ...importedQuestions]);
+    }
   };
 
   const handleUpdateQuiz = async (e: React.FormEvent) => {
@@ -352,6 +363,17 @@ export default function EditQuizPage({
           </h2>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsDocxModalOpen(true)}
+              className="flat-button-secondary text-xs py-1 px-3 bg-indigo-50 border-indigo-300 text-indigo-700 font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition-colors shadow-sm"
+            >
+              <FileUp className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Import from Word (.docx)</span>
+            </button>
+
+            <span className="text-xs text-slate-400 font-semibold mx-1">|</span>
+            <span className="text-xs text-slate-500 font-semibold mr-1">Add:</span>
             <button
               type="button"
               onClick={() => addQuestion("MULTIPLE_CHOICE")}
@@ -592,6 +614,13 @@ export default function EditQuizPage({
           ))}
         </div>
       </div>
+
+      <DocxImportModal
+        isOpen={isDocxModalOpen}
+        onClose={() => setIsDocxModalOpen(false)}
+        onImport={handleImportQuestions}
+        currentQuestionCount={questions.length}
+      />
     </div>
   );
 }
