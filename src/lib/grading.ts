@@ -71,6 +71,14 @@ export function evaluateAnswer(
   rule: QuestionGradingRule
 ): EvaluationResult {
   const rawStudent = studentAnswer ?? "";
+  if (rule.type === "INSTRUCTION") {
+    return {
+      isCorrect: true,
+      pointsAwarded: 0,
+      matchType: "EXACT",
+    };
+  }
+
   const points = rule.points > 0 ? rule.points : 1;
 
   if (!rawStudent.trim()) {

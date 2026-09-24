@@ -475,6 +475,8 @@ D. Database management
                         <div className="pl-5 text-amber-600 italic text-[10px]">
                           {q.type === "SHORT_ANSWER"
                             ? "(Identification item: type correct answer in builder)"
+                            : q.type === "INSTRUCTION"
+                            ? "(Instructional section card - not graded)"
                             : "(Multiple choice: click correct choice radio button in builder)"}
                         </div>
                       )}

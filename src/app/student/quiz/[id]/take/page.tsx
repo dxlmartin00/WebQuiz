@@ -20,6 +20,7 @@ import {
   WifiOff,
   Download,
   RefreshCw,
+  Info,
 } from "lucide-react";
 
 export default function ActiveExamRoomPage({
@@ -485,7 +486,13 @@ export default function ActiveExamRoomPage({
 
   const { quiz, questions } = data;
   const currentQuestion = questions[currentIdx];
-  const answeredCount = Object.keys(answers).filter((k) => answers[k]?.trim()).length;
+  const gradableQuestions = questions.filter((q: any) => q.type !== "INSTRUCTION");
+  const answeredCount = Object.keys(answers).filter(
+    (k) =>
+      !!answers[k]?.trim() &&
+      answers[k] !== "[]" &&
+      questions.find((q: any) => q.id === k)?.type !== "INSTRUCTION"
+  ).length;
   const isTimeCritical = secondsRemaining !== null && secondsRemaining <= 120;
 
   return (
@@ -540,7 +547,7 @@ export default function ActiveExamRoomPage({
 
             <button
               onClick={() => {
-                if (confirm(`Submit your exam now? You have answered ${answeredCount} of ${questions.length} questions.`)) {
+                if (confirm(`Submit your exam now? You have answered ${answeredCount} of ${gradableQuestions.length} questions.`)) {
                   handleSubmitQuiz(false);
                 }
               }}
@@ -582,109 +589,140 @@ export default function ActiveExamRoomPage({
               {/* Question Index & Points Badge */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 border border-indigo-200">
-                  Question {currentIdx + 1} of {questions.length}
+                  {currentQuestion.type === "INSTRUCTION"
+                    ? "Section Instructions / Guidelines"
+                    : `Question ${currentIdx + 1} of ${questions.length}`}
                 </span>
                 <span className="font-mono text-xs font-bold text-slate-500">
-                  {currentQuestion.points} {currentQuestion.points === 1 ? "Point" : "Points"}
+                  {currentQuestion.type === "INSTRUCTION"
+                    ? "No points required"
+                    : `${currentQuestion.points} ${currentQuestion.points === 1 ? "Point" : "Points"}`}
                 </span>
               </div>
 
-              {/* Question Prompt */}
-              <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                {currentQuestion.prompt}
-              </div>
+              {/* Question Prompt / Instruction Area */}
+              {currentQuestion.type === "INSTRUCTION" ? (
+                <div className="bg-indigo-50/60 border-2 border-indigo-200 p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs uppercase tracking-wider">
+                    <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Instruction / Section Guidelines</span>
+                  </div>
+                  <div className="text-sm sm:text-base font-semibold text-slate-900 whitespace-pre-line leading-relaxed">
+                    {currentQuestion.prompt}
+                  </div>
+                  <div className="pt-3 border-t border-indigo-200/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="italic">
+                      ℹ️ This is an instructional section note. No answer is required. Read the instructions and click <strong>Next</strong> to proceed.
+                    </span>
+                    <button
+                      onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
+                      disabled={currentIdx === questions.length - 1}
+                      className="flat-button-primary text-xs py-1.5 px-3 not-italic font-bold flex items-center gap-1"
+                    >
+                      <span>Continue to Questions</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                    {currentQuestion.prompt}
+                  </div>
 
-              {/* Interactive Choice / Input Area */}
-              <div className="pt-2">
-                {currentQuestion.type === "MULTIPLE_CHOICE" || currentQuestion.type === "TRUE_FALSE" ? (
-                  <div className="space-y-2.5">
-                    {currentQuestion.options.map((opt: string, optIdx: number) => {
-                      const isSelected = answers[currentQuestion.id] === opt;
-                      return (
-                        <label
-                          key={optIdx}
-                          onClick={() => handleAnswerChange(currentQuestion.id, opt)}
-                          className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
-                            isSelected
-                              ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
-                              : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question_${currentQuestion.id}`}
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
-                          />
-                          <span className="text-xs sm:text-sm leading-relaxed select-none">
-                            {opt}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : currentQuestion.type === "MULTIPLE_ANSWER" ? (
-                  <div className="space-y-2.5">
-                    <p className="text-[11px] text-slate-500 italic">
-                      Select all correct options that apply:
-                    </p>
-                    {currentQuestion.options.map((opt: string, optIdx: number) => {
-                      let selectedArr: string[] = [];
-                      try {
-                        selectedArr = JSON.parse(answers[currentQuestion.id] || "[]");
-                      } catch {
-                        selectedArr = [];
-                      }
-                      const isChecked = selectedArr.includes(opt);
+                  {/* Interactive Choice / Input Area */}
+                  <div className="pt-2">
+                    {currentQuestion.type === "MULTIPLE_CHOICE" || currentQuestion.type === "TRUE_FALSE" ? (
+                      <div className="space-y-2.5">
+                        {currentQuestion.options.map((opt: string, optIdx: number) => {
+                          const isSelected = answers[currentQuestion.id] === opt;
+                          return (
+                            <label
+                              key={optIdx}
+                              onClick={() => handleAnswerChange(currentQuestion.id, opt)}
+                              className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
+                                isSelected
+                                  ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
+                                  : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`question_${currentQuestion.id}`}
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
+                              />
+                              <span className="text-xs sm:text-sm leading-relaxed select-none">
+                                {opt}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : currentQuestion.type === "MULTIPLE_ANSWER" ? (
+                      <div className="space-y-2.5">
+                        <p className="text-[11px] text-slate-500 italic">
+                          Select all correct options that apply:
+                        </p>
+                        {currentQuestion.options.map((opt: string, optIdx: number) => {
+                          let selectedArr: string[] = [];
+                          try {
+                            selectedArr = JSON.parse(answers[currentQuestion.id] || "[]");
+                          } catch {
+                            selectedArr = [];
+                          }
+                          const isChecked = selectedArr.includes(opt);
 
-                      return (
-                        <label
-                          key={optIdx}
-                          onClick={() => {
-                            const newArr = isChecked
-                              ? selectedArr.filter((item) => item !== opt)
-                              : [...selectedArr, opt];
-                            handleAnswerChange(currentQuestion.id, JSON.stringify(newArr));
-                          }}
-                          className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
-                            isChecked
-                              ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
-                              : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {}}
-                            className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
-                          />
-                          <span className="text-xs sm:text-sm leading-relaxed select-none">
-                            {opt}
-                          </span>
+                          return (
+                            <label
+                              key={optIdx}
+                              onClick={() => {
+                                const newArr = isChecked
+                                  ? selectedArr.filter((item) => item !== opt)
+                                  : [...selectedArr, opt];
+                                handleAnswerChange(currentQuestion.id, JSON.stringify(newArr));
+                              }}
+                              className={`flex items-start gap-3 p-3.5 border cursor-pointer transition-all min-h-[46px] touch-manipulation ${
+                                isChecked
+                                  ? "border-indigo-600 bg-indigo-50/80 font-bold text-indigo-950 shadow-xs"
+                                  : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/60 text-slate-800"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="mt-1 w-4 h-4 text-indigo-600 accent-indigo-600 shrink-0"
+                              />
+                              <span className="text-xs sm:text-sm leading-relaxed select-none">
+                                {opt}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Type your answer below:
                         </label>
-                      );
-                    })}
+                        <input
+                          type="text"
+                          placeholder="Type answer here..."
+                          value={answers[currentQuestion.id] || ""}
+                          onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                          className="flat-input text-xs sm:text-sm py-2.5 sm:py-3 w-full font-mono"
+                          autoFocus
+                        />
+                        <p className="text-[11px] text-slate-400">
+                          Answer auto-saves locally immediately.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Type your answer below:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Type answer here..."
-                      value={answers[currentQuestion.id] || ""}
-                      onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                      className="flat-input text-xs sm:text-sm py-2.5 sm:py-3 w-full font-mono"
-                      autoFocus
-                    />
-                    <p className="text-[11px] text-slate-400">
-                      Answer auto-saves locally immediately.
-                    </p>
-                  </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
 
             {/* Bottom Nav Buttons */}
@@ -699,7 +737,7 @@ export default function ActiveExamRoomPage({
               </button>
 
               <div className="text-[11px] font-mono text-slate-500">
-                {answeredCount} of {questions.length} Answered
+                {answeredCount} of {gradableQuestions.length} Answered
               </div>
 
               <button
@@ -723,35 +761,39 @@ export default function ActiveExamRoomPage({
                 <span>Question Matrix</span>
               </h2>
               <span className="text-[11px] font-mono text-slate-400">
-                {answeredCount}/{questions.length}
+                {answeredCount}/{gradableQuestions.length}
               </span>
             </div>
 
             {/* Number grid */}
             <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {questions.map((q: any, idx: number) => {
-                const isAnswered = !!answers[q.id]?.trim() && answers[q.id] !== "[]";
+                const isInstruction = q.type === "INSTRUCTION";
+                const isAnswered = !isInstruction && !!answers[q.id]?.trim() && answers[q.id] !== "[]";
                 const isCurrent = idx === currentIdx;
 
                 return (
                   <button
                     key={q.id}
                     onClick={() => setCurrentIdx(idx)}
+                    title={isInstruction ? `Section Note: ${q.prompt.slice(0, 30)}...` : `Question ${idx + 1}`}
                     className={`h-9 text-xs font-mono font-bold border transition-all flex items-center justify-center min-h-[38px] touch-manipulation ${
                       isCurrent
                         ? "bg-slate-900 text-white border-slate-900 ring-2 ring-indigo-500"
+                        : isInstruction
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100"
                         : isAnswered
                         ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
                         : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                     }`}
                   >
-                    {idx + 1}
+                    {isInstruction ? "§" : idx + 1}
                   </button>
                 );
               })}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] text-slate-500 font-medium">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-emerald-600 inline-block" />
                 <span>Answered</span>
@@ -763,6 +805,10 @@ export default function ActiveExamRoomPage({
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
                 <span>Current</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-indigo-50 border border-indigo-300 inline-block" />
+                <span>Section Note</span>
               </div>
             </div>
           </div>

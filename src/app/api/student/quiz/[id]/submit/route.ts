@@ -68,6 +68,9 @@ export async function POST(
 
     // Evaluate each question server-side
     for (const question of submission.quiz.questions) {
+      if (question.type === "INSTRUCTION") {
+        continue;
+      }
       totalPossiblePoints += question.points;
       const studentAnswer = answers ? answers[question.id] || "" : "";
 

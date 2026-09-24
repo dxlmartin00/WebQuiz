@@ -13,10 +13,14 @@ import {
   AlertCircle,
   FileUp,
   UploadCloud,
+  FileText,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
+import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
 
 export default function EditQuizPage({
   params,
@@ -81,8 +85,22 @@ export default function EditQuizPage({
     loadQuiz();
   }, [id]);
 
-  const addQuestion = (type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER") => {
-    if (type === "MULTIPLE_CHOICE") {
+  const addQuestion = (type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "INSTRUCTION") => {
+    if (type === "INSTRUCTION") {
+      setQuestions([
+        ...questions,
+        {
+          type: "INSTRUCTION",
+          prompt: "",
+          points: 0,
+          options: [],
+          correctAnswers: [],
+          isCaseSensitive: false,
+          allowFuzzy: false,
+          fuzzyThreshold: 1,
+        },
+      ]);
+    } else if (type === "MULTIPLE_CHOICE") {
       setQuestions([
         ...questions,
         {
@@ -125,6 +143,15 @@ export default function EditQuizPage({
         },
       ]);
     }
+  };
+
+  const moveQuestion = (fromIndex: number, direction: "up" | "down") => {
+    const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= questions.length) return;
+    const next = [...questions];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setQuestions(next);
   };
 
   const updateQuestion = (index: number, updated: Partial<QuestionDraft>) => {
@@ -194,9 +221,11 @@ export default function EditQuizPage({
   }
 
   const totalCalculatedPoints = questions.reduce(
-    (sum, q) => sum + (Number(q.points) || 1),
+    (sum, q) => sum + (q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1)),
     0
   );
+  const gradableQuestionsCount = questions.filter((q) => q.type !== "INSTRUCTION").length;
+  const instructionNotesCount = questions.filter((q) => q.type === "INSTRUCTION").length;
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-5xl">
@@ -223,7 +252,10 @@ export default function EditQuizPage({
           <div className="flex items-center gap-3">
             <div className="text-right pr-3 border-r border-slate-200">
               <div className="text-xs font-bold text-slate-900">
-                {questions.length} Questions
+                {gradableQuestionsCount} Questions
+                {instructionNotesCount > 0 && (
+                  <span className="text-slate-500 font-normal"> + {instructionNotesCount} Notes</span>
+                )}
               </div>
               <div className="text-[11px] text-indigo-600 font-bold">
                 {totalCalculatedPoints} Total Points
@@ -373,7 +405,7 @@ export default function EditQuizPage({
             2. Questions & Matching Engine
           </h2>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setIsDocxModalOpen(true)}
@@ -406,70 +438,157 @@ export default function EditQuizPage({
             >
               + Short Answer / Fuzzy
             </button>
+            <button
+              type="button"
+              onClick={() => addQuestion("INSTRUCTION")}
+              className="flat-button-secondary text-xs py-1 px-2.5 bg-slate-100 border-slate-300 text-slate-800 font-bold hover:bg-slate-200 flex items-center gap-1"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-600" />
+              <span>+ Instruction / Text Field</span>
+            </button>
           </div>
         </div>
 
         {/* Questions Loop */}
         <div className="space-y-4">
-          {questions.map((q, qIndex) => (
-            <div
-              key={qIndex}
-              className="flat-card bg-white p-5 border border-slate-200 space-y-4 hover:border-slate-300 transition-colors"
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center">
-                    {qIndex + 1}
-                  </span>
-                  <span className="flat-badge-slate font-bold uppercase text-[10px]">
-                    {q.type.replace("_", " ")}
-                  </span>
-                  {q.correctAnswers.length === 0 && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-2 py-0.5">
-                      ⚠️ Needs Answer Selection
-                    </span>
-                  )}
-                </div>
+          {(() => {
+            let questionNumber = 0;
+            return questions.map((q, qIndex) => {
+              const isInstruction = q.type === "INSTRUCTION";
+              if (!isInstruction) questionNumber++;
+              const displayNum = questionNumber;
 
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-600">Points:</span>
-                    <input
-                      type="number"
-                      value={q.points}
-                      onChange={(e) =>
-                        updateQuestion(qIndex, {
-                          points: Number(e.target.value) || 1,
-                        })
-                      }
-                      min={1}
-                      className="flat-input w-14 text-xs font-mono py-1 text-center"
-                    />
+              return (
+                <div
+                  key={qIndex}
+                  className={`flat-card bg-white p-5 border space-y-4 transition-colors ${
+                    isInstruction
+                      ? "border-2 border-slate-300 bg-slate-50/40"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      {isInstruction ? (
+                        <span
+                          className="w-6 h-6 bg-slate-800 text-white font-mono font-bold text-xs flex items-center justify-center"
+                          title="Instruction / Section Note"
+                        >
+                          §
+                        </span>
+                      ) : (
+                        <span className="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center">
+                          {displayNum}
+                        </span>
+                      )}
+
+                      <span
+                        className={`font-bold uppercase text-[10px] px-2 py-0.5 ${
+                          isInstruction
+                            ? "bg-slate-800 text-white"
+                            : "flat-badge-slate"
+                        }`}
+                      >
+                        {isInstruction ? "Instruction / Section Note" : q.type.replace("_", " ")}
+                      </span>
+
+                      {!isInstruction && q.correctAnswers.length === 0 && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-2 py-0.5">
+                          ⚠️ Needs Answer Selection
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Reorder Buttons */}
+                      <div className="flex items-center border border-slate-200 bg-slate-50">
+                        <button
+                          type="button"
+                          onClick={() => moveQuestion(qIndex, "up")}
+                          disabled={qIndex === 0}
+                          title="Move Up"
+                          className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20 transition-colors"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveQuestion(qIndex, "down")}
+                          disabled={qIndex === questions.length - 1}
+                          title="Move Down"
+                          className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20 transition-colors"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {isInstruction ? (
+                        <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 border border-slate-200">
+                          0 Pts (Instruction Note)
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-600">Points:</span>
+                          <input
+                            type="number"
+                            value={q.points}
+                            onChange={(e) =>
+                              updateQuestion(qIndex, {
+                                points: Number(e.target.value) || 1,
+                              })
+                            }
+                            min={1}
+                            className="flat-input w-14 text-xs font-mono py-1 text-center"
+                          />
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => removeQuestion(qIndex)}
+                        disabled={questions.length <= 1}
+                        className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition-colors"
+                        title="Remove Question"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => removeQuestion(qIndex)}
-                    disabled={questions.length <= 1}
-                    className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                  Question Prompt *
-                </label>
-                <textarea
-                  value={q.prompt}
-                  onChange={(e) => updateQuestion(qIndex, { prompt: e.target.value })}
-                  rows={2}
-                  required
-                  className="flat-input text-xs resize-none"
-                />
-              </div>
+                  {/* Question Prompt / Instruction Area */}
+                  {isInstruction ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Instruction / Section Text *
+                        </label>
+                        <span className="text-[11px] text-slate-500">
+                          Shown to students between questions (not graded)
+                        </span>
+                      </div>
+                      <textarea
+                        value={q.prompt}
+                        onChange={(e) => updateQuestion(qIndex, { prompt: e.target.value })}
+                        rows={3}
+                        placeholder="Enter instructions for this section (e.g. Part II - Identify the Tool&#10;Directions: Write the exact name of the Figma tool shown or described below. Be careful with your spelling.)"
+                        required
+                        className="flat-input text-xs resize-none font-medium"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Question Prompt *
+                      </label>
+                      <textarea
+                        value={q.prompt}
+                        onChange={(e) => updateQuestion(qIndex, { prompt: e.target.value })}
+                        rows={2}
+                        required
+                        className="flat-input text-xs resize-none"
+                      />
+                    </div>
+                  )}
 
               {q.type === "MULTIPLE_CHOICE" && (
                 <div className="space-y-2 bg-slate-50 p-4 border border-slate-200">
@@ -565,22 +684,20 @@ export default function EditQuizPage({
               {q.type === "SHORT_ANSWER" && (
                 <div className="bg-indigo-50/50 p-4 border border-indigo-200 space-y-3">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-indigo-900 mb-1">
-                      Acceptable Answer(s) & Synonyms (Comma-separated)
-                    </label>
-                    <input
-                      type="text"
-                      value={q.correctAnswers.join(", ")}
-                      onChange={(e) => {
-                        const synonyms = e.target.value
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean);
-                        updateQuestion(qIndex, {
-                          correctAnswers: synonyms.length > 0 ? synonyms : [e.target.value],
-                        });
-                      }}
-                      className="flat-input text-xs font-medium"
+                    <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-indigo-900">
+                        Acceptable Answer(s) & Synonyms *
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        Separate multiple valid variations/synonyms with commas
+                      </span>
+                    </div>
+                    <ShortAnswerSynonymsInput
+                      correctAnswers={q.correctAnswers}
+                      onChange={(synonyms) =>
+                        updateQuestion(qIndex, { correctAnswers: synonyms })
+                      }
+                      placeholder="e.g. Move Tool, V, Pointer (separate synonyms with commas)"
                       required
                     />
                   </div>
@@ -634,8 +751,56 @@ export default function EditQuizPage({
                 </div>
               )}
             </div>
-          ))}
+          );
+        });
+      })()}
+      </div>
+
+      {/* Bottom Save Action */}
+      <div className="pt-6 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-500 font-semibold mr-1">Add to Quiz:</span>
+          <button
+            type="button"
+            onClick={() => addQuestion("MULTIPLE_CHOICE")}
+            className="flat-button-secondary text-xs py-1.5 px-3"
+          >
+            + Multiple Choice
+          </button>
+          <button
+            type="button"
+            onClick={() => addQuestion("TRUE_FALSE")}
+            className="flat-button-secondary text-xs py-1.5 px-3"
+          >
+            + True/False
+          </button>
+          <button
+            type="button"
+            onClick={() => addQuestion("SHORT_ANSWER")}
+            className="flat-button-secondary text-xs py-1.5 px-3 bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold"
+          >
+            + Short Answer / Fuzzy
+          </button>
+          <button
+            type="button"
+            onClick={() => addQuestion("INSTRUCTION")}
+            className="flat-button-secondary text-xs py-1.5 px-3 bg-slate-100 border-slate-300 text-slate-800 font-bold hover:bg-slate-200 flex items-center gap-1"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-600" />
+            <span>+ Instruction / Text Field</span>
+          </button>
         </div>
+
+        <button
+          type="button"
+          onClick={handleUpdateQuiz}
+          disabled={submitting}
+          className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
+        >
+          <Save className="w-4 h-4" />
+          <span>{submitting ? "Saving..." : "Save Changes"}</span>
+        </button>
+      </div>
       </div>
 
       <DocxImportModal

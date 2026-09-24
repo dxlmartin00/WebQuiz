@@ -117,8 +117,11 @@ export async function POST(
         });
       }
     } else {
-      // Calculate total points
-      const totalPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
+      // Calculate total points (excluding instructional text cards)
+      const totalPoints = quiz.questions.reduce(
+        (sum, q) => sum + (q.type === "INSTRUCTION" ? 0 : q.points),
+        0
+      );
 
       // Create new In-Progress submission with server startedAt timestamp
       submission = await prisma.submission.create({

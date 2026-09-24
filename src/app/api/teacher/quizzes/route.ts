@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
         quizId: quiz.id,
         type: q.type || "MULTIPLE_CHOICE",
         prompt: q.prompt?.trim() || "Untitled Question",
-        points: Number(q.points) || 1,
+        points: q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1),
         options: JSON.stringify(q.options || []),
         correctAnswers: JSON.stringify(q.correctAnswers || []),
         isCaseSensitive: !!q.isCaseSensitive,
