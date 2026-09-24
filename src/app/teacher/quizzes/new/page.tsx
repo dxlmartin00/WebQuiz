@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Shuffle,
   FileUp,
+  UploadCloud,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
@@ -235,6 +236,16 @@ export default function NewQuizPage() {
                 {totalCalculatedPoints} Total Points
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsDocxModalOpen(true)}
+              className="flat-button-secondary text-xs py-2 px-3 bg-indigo-50 border-indigo-300 text-indigo-700 font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition-colors shadow-xs"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Upload Questionnaire</span>
+            </button>
+
             <button
               onClick={handleSaveQuiz}
               disabled={submitting}
@@ -394,10 +405,10 @@ export default function NewQuizPage() {
             <button
               type="button"
               onClick={() => setIsDocxModalOpen(true)}
-              className="flat-button-secondary text-xs py-1 px-3 bg-indigo-50 border-indigo-300 text-indigo-700 font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition-colors shadow-sm"
+              className="flat-button-secondary text-xs py-1 px-3 bg-indigo-50 border-indigo-300 text-indigo-700 font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition-colors shadow-xs"
             >
-              <FileUp className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Import from Word (.docx)</span>
+              <UploadCloud className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Upload Questionnaire (.docx / Paste)</span>
             </button>
 
             <span className="text-xs text-slate-400 font-semibold mx-1">|</span>
@@ -442,6 +453,11 @@ export default function NewQuizPage() {
                   <span className="flat-badge-slate font-bold uppercase text-[10px]">
                     {q.type.replace("_", " ")}
                   </span>
+                  {q.correctAnswers.length === 0 && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-2 py-0.5">
+                      ⚠️ Needs Answer Selection
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -488,9 +504,16 @@ export default function NewQuizPage() {
               {/* Question Type Specific Inputs */}
               {q.type === "MULTIPLE_CHOICE" && (
                 <div className="space-y-2 bg-slate-50 p-4 border border-slate-200">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Choices & Answer Key (Select the correct option):
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-1 pb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Choices & Answer Key (Select the correct option):
+                    </label>
+                    {q.correctAnswers.length === 0 && (
+                      <span className="text-[11px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 border border-amber-200">
+                        ⚡ Click the radio circle next to the correct choice
+                      </span>
+                    )}
+                  </div>
                   {q.options.map((opt, optIndex) => (
                     <div key={optIndex} className="flex items-center gap-2">
                       <input

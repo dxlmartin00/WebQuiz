@@ -1,30 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
-import { parseDocxQuestions } from "@/lib/docx-parser";
+import { parseQuestionnaireText } from "@/lib/questionnaire-parser";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const teacherId = session?.user?.id;
-  const isApproved = (session?.user as any)?.isApproved;
-
-  if (!teacherId || !session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isApproved) {
-    return NextResponse.json(
-      { error: "Unauthorized or pending approval" },
-      { status: 403 }
-    );
-  }
-
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { email: session.user.email.toLowerCase().trim() },
+    });
+
+    if (!teacher || !teacher.isApproved) {
+      return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+    }
+
     const contentType = req.headers.get("content-type") || "";
-    let rawText = "";
+    let extractedText = "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -37,10 +36,10 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
 
         if (fileName.endsWith(".docx") || fileName.endsWith(".doc")) {
-          const { value } = await mammoth.extractRawText({ buffer });
-          rawText = value;
+          const result = await mammoth.extractRawText({ buffer });
+          extractedText = result.value;
         } else if (fileName.endsWith(".txt")) {
-          rawText = buffer.toString("utf-8");
+          extractedText = buffer.toString("utf-8");
         } else {
           return NextResponse.json(
             { error: "Unsupported file format. Please upload a .docx or .txt document, or paste the text directly." },
@@ -48,28 +47,28 @@ export async function POST(req: NextRequest) {
           );
         }
       } else if (textParam) {
-        rawText = textParam;
+        extractedText = textParam;
       }
     } else {
       // JSON body with direct text paste
       const body = await req.json();
-      rawText = body.text || "";
+      extractedText = body.text || "";
     }
 
-    if (!rawText || !rawText.trim()) {
+    if (!extractedText.trim()) {
       return NextResponse.json(
-        { error: "The questionnaire content is empty or unreadable." },
+        { error: "No text or document content provided." },
         { status: 400 }
       );
     }
 
-    const result = parseDocxQuestions(rawText);
+    const questions = parseQuestionnaireText(extractedText);
 
-    if (result.questions.length === 0) {
+    if (questions.length === 0) {
       return NextResponse.json(
         {
           error:
-            "No quiz items were detected. Please ensure questions are numbered (e.g. '1. Question prompt...') followed by options (A, B, C, D) or fill-in statements.",
+            "Could not detect any numbered questions from the questionnaire. Please ensure questions are numbered (e.g., '1.', '2.') and multiple choice options have letters (e.g., 'A.', 'B.').",
         },
         { status: 422 }
       );
@@ -77,13 +76,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      questions: result.questions,
-      summary: result.summary,
+      count: questions.length,
+      questions,
     });
   } catch (error: any) {
-    console.error("Questionnaire parsing error:", error);
+    console.error("Parse questionnaire error:", error);
     return NextResponse.json(
-      { error: error?.message || "An error occurred while parsing the questionnaire." },
+      { error: error?.message || "Failed to parse questionnaire file." },
       { status: 500 }
     );
   }

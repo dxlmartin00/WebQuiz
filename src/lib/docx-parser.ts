@@ -48,7 +48,7 @@ function isIgnoredHeaderLine(line: string): boolean {
   const ignorePatterns = [
     /^(?:test|part|section)\s+[ivxlcdm0-9]+[:\.\-]?\s*.*$/i,
     /^(?:multiple choice|true or false|identification|enumeration|matching type|short answer|essay)[:\.\-]?\s*.*$/i,
-    /^(?:directions?|instructions?|general directions?)[:\.\-]?\s*.*$/i,
+    /^(?:directions?|instructions?|general directions?|choose the best answer|write the name|write the correct)[:\.\-]?\s*.*$/i,
     /^(?:name|date|score|class|section|subject|teacher|grade|course|year)[:\.\-]?\s*_{2,}.*$/i,
     /^(?:name|date|score|class|section|subject|teacher|grade|course|year)\s*:.*$/i,
     /^(?:prelim|midterm|semi-final|final|finals|quarterly|diagnostic)\s+(?:exam|examination|quiz|test|assessment).*$/i,
@@ -58,6 +58,14 @@ function isIgnoredHeaderLine(line: string): boolean {
   ];
 
   return ignorePatterns.some((pattern) => pattern.test(trimmed));
+}
+
+/**
+ * Checks if a string is simply a blank for students to write on, e.g. "_________" or "...."
+ */
+function isBlankPlaceholder(text: string): boolean {
+  const clean = text.trim();
+  return /^[_.\s\-]{2,}$/.test(clean);
 }
 
 /**
@@ -88,7 +96,7 @@ function splitHorizontalOptions(line: string): string[] {
 }
 
 /**
- * Parses raw text extracted from a .docx file into structured QuestionDraft objects.
+ * Parses raw text extracted from a .docx file or pasted text into structured QuestionDraft objects.
  */
 export function parseDocxQuestions(rawText: string): DocxParseResult {
   const cleaned = cleanWordText(rawText);
@@ -125,19 +133,21 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
 
     // If we haven't encountered any numbered question yet, all lines are header/instructions/metadata
     if (!hasEncounteredNumberedQuestion) {
-      // Skip headers, titles, subject info, etc.
       continue;
     }
 
-    // We have an active block:
-    // 1. Check for Answer line
+    // Check if line is a blank line for students like "Answer: _____________"
     const ansMatch = line.match(answerLineRegex);
     if (ansMatch) {
-      currentBlock!.answerLine = ansMatch[1].trim();
+      const candidateAns = ansMatch[1].trim();
+      // If it's just blanks (underscores/dots), it's a student fill-in space, not an answer key!
+      if (!isBlankPlaceholder(candidateAns) && candidateAns.length > 0) {
+        currentBlock!.answerLine = candidateAns;
+      }
       continue;
     }
 
-    // 2. Check for options (including horizontally stacked options)
+    // Check for options (including horizontally stacked options)
     const horizontalSplit = splitHorizontalOptions(line);
     let allPartsAreOptions = true;
 
@@ -153,18 +163,23 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       continue;
     }
 
-    // 3. Single option line
+    // Single option line
     if (singleOptionRegex.test(line)) {
       currentBlock!.optionLines.push(line);
       continue;
     }
 
-    // 4. Ignored section or test headers in the middle of document
+    // Ignored section or test headers in the middle of document
     if (isIgnoredHeaderLine(line)) {
       continue;
     }
 
-    // 5. Continuation of prompt or choice
+    // Blank line placeholders on their own line (e.g. "_____________")
+    if (isBlankPlaceholder(line)) {
+      continue;
+    }
+
+    // Continuation of prompt or choice
     if (currentBlock!.optionLines.length === 0) {
       currentBlock!.promptLines.push(line);
     } else {
@@ -194,7 +209,13 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
   const questions: QuestionDraft[] = [];
 
   for (const block of blocks) {
-    const prompt = block.promptLines.filter(Boolean).join(" ").trim();
+    let prompt = block.promptLines
+      .filter(Boolean)
+      .join(" ")
+      .replace(/Answer\s*:\s*[_.\s]*/gi, "")
+      .replace(/_{3,}/g, "________")
+      .trim();
+
     if (!prompt) continue;
 
     const rawOptions: { letter: string; text: string; isMarked: boolean }[] = [];
@@ -243,11 +264,9 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       /^(?:true|false|t|f)$/i.test(block.answerLine.trim());
 
     if (isExplicitTrueFalseChoices || isPromptTrueFalse || (isAnswerTrueFalse && rawOptions.length <= 2)) {
-      // TRUE_FALSE question
       type = "TRUE_FALSE";
       normalizedOptions.push("True", "False");
 
-      // Determine answer if available
       let detectedTF = "";
       if (block.answerLine) {
         const trimmedAns = block.answerLine.trim();
@@ -267,23 +286,18 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         correctAnswers.push(detectedTF);
       }
     } else if (rawOptions.length >= 2) {
-      // MULTIPLE_CHOICE question
       type = "MULTIPLE_CHOICE";
       rawOptions.forEach((o) => normalizedOptions.push(o.text));
 
-      // Resolve Answer
       let selectedOptionText = "";
 
-      // 1. Check if an option was marked with asterisk or (correct)
       const marked = rawOptions.find((o) => o.isMarked);
       if (marked) {
         selectedOptionText = marked.text;
       }
 
-      // 2. Check if answer line was specified, e.g. "Answer: B" or "Answer: London"
       if (!selectedOptionText && block.answerLine) {
         const ans = block.answerLine.trim();
-        // Check single letter: A, B, C...
         const letterMatch = ans.match(/^([A-Ha-h])(?:[\.\)\-:]|$)/i);
         if (letterMatch) {
           const letter = letterMatch[1].toUpperCase();
@@ -293,7 +307,6 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
           }
         }
 
-        // Check exact or partial text match with options
         if (!selectedOptionText) {
           const matchingOpt = rawOptions.find(
             (o) =>
@@ -310,13 +323,11 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         correctAnswers.push(selectedOptionText);
       }
     } else {
-      // SHORT_ANSWER question
       type = "SHORT_ANSWER";
 
-      // If answer line is present, use it as correct answer
       if (block.answerLine) {
         const ans = block.answerLine.trim();
-        if (ans) {
+        if (ans && !isBlankPlaceholder(ans)) {
           correctAnswers.push(ans);
         }
       }
@@ -325,9 +336,9 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
     questions.push({
       type,
       prompt,
-      points: type === "SHORT_ANSWER" ? 2 : 1,
+      points: 1,
       options: normalizedOptions,
-      correctAnswers,
+      correctAnswers, // If document has no answer key, left empty for instructor to select
       isCaseSensitive: false,
       allowFuzzy: type === "SHORT_ANSWER",
       fuzzyThreshold: 1,
