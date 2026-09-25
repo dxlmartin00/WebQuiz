@@ -122,7 +122,7 @@ export default function StudentDashboardPage() {
                   Completed Exams
                 </span>
                 <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-2 font-mono">
-                  {completedQuizzes.length}
+                  {completedQuizzes.filter((q: any) => !q.expiredWithoutSubmission).length}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1 font-medium">
                   Auto-graded & recorded
@@ -275,6 +275,8 @@ export default function StudentDashboardPage() {
               <div className="grid grid-cols-1 gap-3">
                 {completedQuizzes.map((q: any) => {
                   const s = q.submission;
+                  const isExpired = !!q.expiredWithoutSubmission;
+
                   return (
                     <div
                       key={q.id}
@@ -282,10 +284,21 @@ export default function StudentDashboardPage() {
                     >
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="flat-badge-emerald text-[11px] font-bold">COMPLETED</span>
+                          {isExpired ? (
+                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
+                              MISSED / DEADLINE PASSED
+                            </span>
+                          ) : (
+                            <span className="flat-badge-emerald text-[11px] font-bold">COMPLETED</span>
+                          )}
                           {s?.submittedAt && (
                             <span className="text-xs text-slate-400 font-mono">
                               Submitted on {new Date(s.submittedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                          {isExpired && q.deadlineAt && (
+                            <span className="text-xs text-slate-400 font-mono">
+                              Closed on {new Date(q.deadlineAt).toLocaleString()}
                             </span>
                           )}
                         </div>
@@ -303,10 +316,18 @@ export default function StudentDashboardPage() {
                       </div>
 
                       <div className="text-left md:text-right border-t md:border-t-0 pt-3 md:pt-0">
-                        <div className="text-xs text-slate-500 font-semibold">FINAL SCORE</div>
-                        <div className="text-2xl font-black text-slate-900 font-mono">
-                          {s?.score ?? 0} <span className="text-sm font-normal text-slate-400">/ {s?.totalPoints ?? q.totalPoints}</span>
-                        </div>
+                        {isExpired ? (
+                          <div className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1.5 border border-rose-200">
+                            No submission recorded
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-xs text-slate-500 font-semibold">FINAL SCORE</div>
+                            <div className="text-2xl font-black text-slate-900 font-mono">
+                              {s?.score ?? 0} <span className="text-sm font-normal text-slate-400">/ {s?.totalPoints ?? q.totalPoints}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );

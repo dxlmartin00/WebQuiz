@@ -22,6 +22,19 @@ import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
 import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
 
+function formatForDatetimeLocal(isoOrDateString?: string | null): string {
+  if (!isoOrDateString) return "";
+  const d = new Date(isoOrDateString);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export default function EditQuizPage({
   params,
 }: {
@@ -58,9 +71,7 @@ export default function EditQuizPage({
         setDescription(q.description || "");
         setDurationMinutes(q.durationMinutes);
         setMaxViolations(q.maxViolations);
-        setDeadlineAt(
-          q.deadlineAt ? new Date(q.deadlineAt).toISOString().slice(0, 16) : ""
-        );
+        setDeadlineAt(formatForDatetimeLocal(q.deadlineAt));
         setIsPublished(q.isPublished);
         setShuffleQuestions(q.shuffleQuestions);
         setShuffleChoices(q.shuffleChoices);
