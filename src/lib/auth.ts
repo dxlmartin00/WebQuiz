@@ -3,6 +3,16 @@ import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "lummartin@nemsu.edu.ph").toLowerCase().trim();
+const ADMIN_EMAILS = new Set([
+  ADMIN_EMAIL,
+  "lummartin@nemsu.edu.ph",
+  "dxlmartin0@gmail.com",
+]);
+
+export function isSystemAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.has(email.toLowerCase().trim());
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,7 +27,7 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === "google" && user.email) {
         try {
           const email = user.email.toLowerCase().trim();
-          const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
+          const isAdmin = isSystemAdmin(email);
 
           await prisma.teacher.upsert({
             where: { email },
@@ -48,7 +58,7 @@ export const authOptions: NextAuthOptions = {
       if (user && user.email) {
         const email = user.email.toLowerCase().trim();
         token.email = email;
-        const isAdmin = email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph";
+        const isAdmin = isSystemAdmin(email);
 
         try {
           let teacher = await prisma.teacher.findUnique({
@@ -71,8 +81,8 @@ export const authOptions: NextAuthOptions = {
           }
 
           token.id = teacher.id;
-          token.role = teacher.role;
-          token.isApproved = teacher.isApproved;
+          token.role = isAdmin ? "ADMIN" : teacher.role;
+          token.isApproved = isAdmin ? true : teacher.isApproved;
         } catch (err) {
           console.error("JWT teacher sync error:", err);
           if (isAdmin) {
@@ -92,7 +102,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email as string;
 
         const email = (token.email as string).toLowerCase().trim();
-        if (email === ADMIN_EMAIL || email === "lummartin@nemsu.edu.ph") {
+        if (isSystemAdmin(email)) {
           session.user.role = "ADMIN";
           session.user.isApproved = true;
         }

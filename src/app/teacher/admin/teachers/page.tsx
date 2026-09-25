@@ -229,7 +229,7 @@ export default function AdminFacultyApprovalsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
                 {filteredTeachers.map((t) => {
-                  const isSuperAdmin = t.email === "lummartin@nemsu.edu.ph";
+                  const isSuperAdmin = t.email === "lummartin@nemsu.edu.ph" || t.email === "dxlmartin0@gmail.com";
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-4 py-3.5">
