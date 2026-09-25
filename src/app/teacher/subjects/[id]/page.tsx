@@ -119,13 +119,16 @@ export default function SubjectDetailPage({
     setRemovingStudent(true);
 
     try {
-      const res = await fetch(`/api/teacher/subjects/${id}/roster`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentIdNumber: studentToDelete.idNumber,
-        }),
-      });
+      const res = await fetch(
+        `/api/teacher/subjects/${id}/roster?studentIdNumber=${encodeURIComponent(studentToDelete.idNumber)}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentIdNumber: studentToDelete.idNumber,
+          }),
+        }
+      );
 
       const data = await res.json();
 

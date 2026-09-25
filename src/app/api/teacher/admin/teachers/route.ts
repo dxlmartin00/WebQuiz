@@ -97,7 +97,16 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const teacherId = searchParams.get("teacherId");
+    let teacherId = searchParams.get("teacherId") || searchParams.get("id");
+
+    if (!teacherId) {
+      try {
+        const body = await req.json();
+        teacherId = body.teacherId || body.id;
+      } catch {
+        // body might not be provided
+      }
+    }
 
     if (!teacherId) {
       return NextResponse.json({ error: "Missing teacherId." }, { status: 400 });
@@ -105,6 +114,14 @@ export async function DELETE(req: NextRequest) {
 
     if (currentUser && teacherId === currentUser.id) {
       return NextResponse.json({ error: "Cannot delete your own admin account." }, { status: 400 });
+    }
+
+    const targetTeacher = await prisma.teacher.findUnique({
+      where: { id: teacherId },
+    });
+
+    if (targetTeacher && isSystemAdmin(targetTeacher.email)) {
+      return NextResponse.json({ error: "Cannot delete system administrator account." }, { status: 403 });
     }
 
     await prisma.teacher.delete({

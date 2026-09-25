@@ -83,7 +83,7 @@ export default function AdminFacultyApprovalsPage() {
     setDeleting(true);
 
     try {
-      const res = await fetch(`/api/teacher/admin/teachers?id=${teacherToDelete.id}`, {
+      const res = await fetch(`/api/teacher/admin/teachers?teacherId=${teacherToDelete.id}&id=${teacherToDelete.id}`, {
         method: "DELETE",
       });
 

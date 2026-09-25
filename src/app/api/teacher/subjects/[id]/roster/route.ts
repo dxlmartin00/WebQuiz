@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, isSystemAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -12,19 +12,23 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
+    where: { email },
   });
 
-  if (!teacher || !teacher.isApproved) {
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
     return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
   const { id: subjectId } = await params;
 
-  // Strict ownership check
+  // Strict ownership check (Admins can manage any subject)
   const subject = await prisma.subject.findFirst({
-    where: { id: subjectId, teacherId: teacher.id },
+    where: isUserAdmin ? { id: subjectId } : { id: subjectId, teacherId: teacher.id },
   });
 
   if (!subject) {
@@ -125,19 +129,23 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
+    where: { email },
   });
 
-  if (!teacher || !teacher.isApproved) {
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
     return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
   const { id: subjectId } = await params;
 
-  // Strict ownership check
+  // Strict ownership check (Admins can manage any subject)
   const subject = await prisma.subject.findFirst({
-    where: { id: subjectId, teacherId: teacher.id },
+    where: isUserAdmin ? { id: subjectId } : { id: subjectId, teacherId: teacher.id },
   });
 
   if (!subject) {
@@ -145,7 +153,16 @@ export async function DELETE(
   }
 
   const { searchParams } = new URL(req.url);
-  const studentIdNumber = searchParams.get("studentIdNumber");
+  let studentIdNumber = searchParams.get("studentIdNumber") || searchParams.get("idNumber");
+
+  if (!studentIdNumber) {
+    try {
+      const body = await req.json();
+      studentIdNumber = body.studentIdNumber || body.idNumber;
+    } catch {
+      // body might not be provided
+    }
+  }
 
   if (!studentIdNumber) {
     return NextResponse.json(
