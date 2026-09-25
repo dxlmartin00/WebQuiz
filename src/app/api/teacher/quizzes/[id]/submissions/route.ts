@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, isSystemAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -12,22 +12,25 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
   const teacher = await prisma.teacher.findUnique({
-    where: { email: session.user.email.toLowerCase().trim() },
+    where: { email },
   });
 
-  if (!teacher || !teacher.isApproved) {
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
     return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
   }
 
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
   const { id: quizId } = await params;
 
-  // Strict ownership check
+  // Strict ownership check (Admins can view any quiz)
   const quiz = await prisma.quiz.findFirst({
-    where: {
-      id: quizId,
-      subject: { teacherId: teacher.id },
-    },
+    where: isUserAdmin
+      ? { id: quizId }
+      : { id: quizId, subject: { teacherId: teacher.id } },
     include: {
       subject: {
         include: {
@@ -116,4 +119,82 @@ export async function GET(
     },
     submissions: fullRosterStatus,
   });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { email },
+  });
+
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
+  const { id: quizId } = await params;
+
+  // Strict ownership check (Admins can manage any quiz)
+  const quiz = await prisma.quiz.findFirst({
+    where: isUserAdmin
+      ? { id: quizId }
+      : { id: quizId, subject: { teacherId: teacher.id } },
+  });
+
+  if (!quiz) {
+    return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  let studentIdNumber = searchParams.get("studentIdNumber");
+  let submissionId = searchParams.get("submissionId");
+
+  if (!studentIdNumber && !submissionId) {
+    try {
+      const body = await req.json();
+      studentIdNumber = body.studentIdNumber;
+      submissionId = body.submissionId;
+    } catch {
+      // body optional
+    }
+  }
+
+  if (!studentIdNumber && !submissionId) {
+    return NextResponse.json(
+      { error: "studentIdNumber or submissionId is required to reset attempt" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const deleteWhere: any = { quizId };
+    if (submissionId) {
+      deleteWhere.id = submissionId;
+    } else if (studentIdNumber) {
+      deleteWhere.studentIdNumber = studentIdNumber.trim().toUpperCase();
+    }
+
+    const deleted = await prisma.submission.deleteMany({
+      where: deleteWhere,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Student attempt reset successfully.",
+      count: deleted.count,
+    });
+  } catch (error) {
+    console.error("Reset submission error:", error);
+    return NextResponse.json({ error: "Failed to reset student attempt" }, { status: 500 });
+  }
 }

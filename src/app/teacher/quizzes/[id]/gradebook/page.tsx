@@ -14,8 +14,10 @@ import {
   FileSpreadsheet,
   Award,
   RefreshCw,
+  RotateCcw,
   X,
 } from "lucide-react";
+import { useToast } from "@/components/ui/ToastContext";
 
 export default function QuizGradebookPage({
   params,
@@ -23,11 +25,14 @@ export default function QuizGradebookPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const toast = useToast();
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
+  const [resettingStudent, setResettingStudent] = useState<any | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   const fetchGradebook = async () => {
     try {
@@ -40,6 +45,38 @@ export default function QuizGradebookPage({
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetAttempt = async (student: any) => {
+    if (!student) return;
+    try {
+      setIsResetting(true);
+      const res = await fetch(`/api/teacher/quizzes/${id}/submissions`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIdNumber: student.studentIdNumber,
+          submissionId: student.submissionId,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to reset student attempt");
+
+      toast.success(
+        "Attempt Reset",
+        `${student.studentName}'s attempt was cleared. They can now re-take this quiz.`
+      );
+      setResettingStudent(null);
+      if (selectedSubmission?.studentIdNumber === student.studentIdNumber) {
+        setSelectedSubmission(null);
+      }
+      fetchGradebook();
+    } catch (err: any) {
+      toast.error("Reset Failed", err.message);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -267,17 +304,31 @@ export default function QuizGradebookPage({
                         : "-"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {s.hasSubmitted ? (
-                        <button
-                          onClick={() => setSelectedSubmission(s)}
-                          className="flat-button-secondary text-xs py-1 px-2.5 flex items-center gap-1 ml-auto"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Review</span>
-                        </button>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">-</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {s.hasSubmitted && (
+                          <button
+                            onClick={() => setSelectedSubmission(s)}
+                            className="flat-button-secondary text-xs py-1 px-2.5 flex items-center gap-1"
+                            title="Review question answers & audit log"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Review</span>
+                          </button>
+                        )}
+                        {s.status !== "NOT_STARTED" && (
+                          <button
+                            onClick={() => setResettingStudent(s)}
+                            className="border border-slate-200 hover:border-amber-500 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-xs py-1 px-2.5 flex items-center gap-1 transition-colors"
+                            title="Reset student attempt (allow re-take)"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Reset</span>
+                          </button>
+                        )}
+                        {s.status === "NOT_STARTED" && (
+                          <span className="text-slate-400 text-[11px]">-</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -401,12 +452,78 @@ export default function QuizGradebookPage({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setResettingStudent(selectedSubmission)}
+                className="border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs py-1.5 px-3 flex items-center gap-1.5 font-bold transition-colors"
+                title="Clear submission and allow student to re-take"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                <span>Reset Student Attempt</span>
+              </button>
+
               <button
                 onClick={() => setSelectedSubmission(null)}
                 className="flat-button-dark text-xs py-1.5 px-4"
               >
                 Close Inspector
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Attempt Confirmation Modal */}
+      {resettingStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+          <div className="flat-card border-2 border-slate-900 bg-white max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="p-2.5 bg-amber-100 border border-amber-300 rounded-none">
+                <RotateCcw className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Reset Student Attempt?</h3>
+                <p className="text-xs text-slate-500">Academic Consideration / Retake Authorization</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-1.5 bg-slate-50 p-3.5 border border-slate-200 font-sans">
+              <p className="text-slate-500">You are about to reset the examination attempt for:</p>
+              <div className="font-bold text-slate-900 text-sm">
+                {resettingStudent.studentName}
+              </div>
+              <div className="font-mono text-indigo-700 text-xs font-semibold">
+                Student ID: {resettingStudent.studentIdNumber}
+              </div>
+            </div>
+
+            <div className="text-[11px] text-amber-950 bg-amber-50/80 p-3.5 border border-amber-200 space-y-1 leading-relaxed">
+              <p className="font-bold text-amber-900">What happens when you reset:</p>
+              <ul className="list-disc list-inside space-y-1 text-slate-700">
+                <li>Current score ({resettingStudent.score ?? 0} pts) and answers will be cleared.</li>
+                <li>Violation strikes ({resettingStudent.violationCount ?? 0} strikes) will be wiped clean.</li>
+                <li>The student's status will return to <b>Active</b> with a fresh timer, allowing them to re-take the exam.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setResettingStudent(null)}
+                disabled={isResetting}
+                className="flat-button-secondary text-xs py-2 px-3.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResetAttempt(resettingStudent)}
+                disabled={isResetting}
+                className="flat-button-primary bg-amber-600 border-amber-700 hover:bg-amber-700 text-white text-xs py-2 px-4 flex items-center gap-1.5 font-bold"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
+                <span>{isResetting ? "Resetting..." : "Confirm & Reset Attempt"}</span>
               </button>
             </div>
           </div>
