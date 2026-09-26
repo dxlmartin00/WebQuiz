@@ -44,6 +44,61 @@ export function DocxImportModal({
   const [showGuidelines, setShowGuidelines] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const liveSummary = React.useMemo(() => {
+    if (!parsedQuestions.length) return null;
+    const gradable = parsedQuestions.filter((q) => q.type !== "INSTRUCTION");
+    return {
+      total: parsedQuestions.length,
+      multipleChoice: parsedQuestions.filter((q) => q.type === "MULTIPLE_CHOICE").length,
+      trueFalse: parsedQuestions.filter((q) => q.type === "TRUE_FALSE").length,
+      shortAnswer: parsedQuestions.filter((q) => q.type === "SHORT_ANSWER").length,
+      instructions: parsedQuestions.filter((q) => q.type === "INSTRUCTION").length,
+      withAnswers: gradable.filter((q) => q.correctAnswers.length > 0).length,
+      withoutAnswers: gradable.filter((q) => q.correctAnswers.length === 0).length,
+    };
+  }, [parsedQuestions]);
+
+  const activeSummary = liveSummary || summary;
+
+  const nonMcCount = parsedQuestions.filter(
+    (q) => q.type === "TRUE_FALSE" || q.type === "SHORT_ANSWER"
+  ).length;
+
+  const handleToggleNonMcType = (index: number, newType: "TRUE_FALSE" | "SHORT_ANSWER") => {
+    setParsedQuestions((prev) => {
+      const updated = [...prev];
+      const target = updated[index];
+      if (!target || target.type === "INSTRUCTION" || (target.type === "MULTIPLE_CHOICE" && target.options.length > 2)) {
+        return prev;
+      }
+      updated[index] = {
+        ...target,
+        type: newType,
+        options: newType === "TRUE_FALSE" ? ["True", "False"] : [],
+        correctAnswers: [],
+        allowFuzzy: newType === "SHORT_ANSWER",
+      };
+      return updated;
+    });
+  };
+
+  const handleBulkSwitchNonMcType = (newType: "TRUE_FALSE" | "SHORT_ANSWER") => {
+    setParsedQuestions((prev) =>
+      prev.map((q) => {
+        if (q.type === "INSTRUCTION" || (q.type === "MULTIPLE_CHOICE" && q.options.length > 2)) {
+          return q;
+        }
+        return {
+          ...q,
+          type: newType,
+          options: newType === "TRUE_FALSE" ? ["True", "False"] : [],
+          correctAnswers: [],
+          allowFuzzy: newType === "SHORT_ANSWER",
+        };
+      })
+    );
+  };
+
   if (!isOpen) return null;
 
   const handleProcessFile = async (selectedFile: File) => {
@@ -351,12 +406,12 @@ D. Database management
           )}
 
           {/* Parsed Results Summary & Preview */}
-          {summary && parsedQuestions.length > 0 && (
+          {activeSummary && parsedQuestions.length > 0 && (
             <div className="space-y-4 pt-2 animate-in fade-in">
               {/* Summary Stats */}
               <div
                 className={`grid gap-2.5 ${
-                  summary.instructions > 0
+                  activeSummary.instructions > 0
                     ? "grid-cols-2 sm:grid-cols-5"
                     : "grid-cols-2 sm:grid-cols-4"
                 }`}
@@ -364,25 +419,25 @@ D. Database management
                 <div className="p-3 bg-slate-100 border border-slate-200">
                   <div className="text-[10px] uppercase font-bold text-slate-500">Total Questions</div>
                   <div className="text-lg font-black text-slate-900">
-                    {summary.total - (summary.instructions || 0)}
+                    {activeSummary.total - (activeSummary.instructions || 0)}
                   </div>
                 </div>
                 <div className="p-3 bg-blue-50 border border-blue-200">
                   <div className="text-[10px] uppercase font-bold text-blue-600">Multiple Choice</div>
-                  <div className="text-lg font-black text-blue-900">{summary.multipleChoice}</div>
+                  <div className="text-lg font-black text-blue-900">{activeSummary.multipleChoice}</div>
                 </div>
                 <div className="p-3 bg-emerald-50 border border-emerald-200">
                   <div className="text-[10px] uppercase font-bold text-emerald-600">True / False</div>
-                  <div className="text-lg font-black text-emerald-900">{summary.trueFalse}</div>
+                  <div className="text-lg font-black text-emerald-900">{activeSummary.trueFalse}</div>
                 </div>
                 <div className="p-3 bg-purple-50 border border-purple-200">
                   <div className="text-[10px] uppercase font-bold text-purple-600">Short Answer / ID</div>
-                  <div className="text-lg font-black text-purple-900">{summary.shortAnswer}</div>
+                  <div className="text-lg font-black text-purple-900">{activeSummary.shortAnswer}</div>
                 </div>
-                {summary.instructions > 0 && (
+                {activeSummary.instructions > 0 && (
                   <div className="p-3 bg-amber-50 border border-amber-200">
                     <div className="text-[10px] uppercase font-bold text-amber-700">Section Notes</div>
-                    <div className="text-lg font-black text-amber-900">{summary.instructions}</div>
+                    <div className="text-lg font-black text-amber-900">{activeSummary.instructions}</div>
                   </div>
                 )}
               </div>
@@ -437,9 +492,34 @@ D. Database management
                     <span>Detected Questions Preview ({parsedQuestions.length})</span>
                   </div>
                   <span className="text-[10px] text-amber-700 font-medium">
-                    ⚡ Answers will be ready for you to select/type in the builder
+                    ⚡ Switch types or customize per item before importing
                   </span>
                 </div>
+
+                {nonMcCount > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-100 border border-slate-300 text-xs">
+                    <span className="font-bold text-slate-700 text-[11px] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Bulk switch items without choices ({nonMcCount}):</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleBulkSwitchNonMcType("TRUE_FALSE")}
+                        className="flat-button-secondary text-[10px] py-1 px-2.5 bg-white text-emerald-800 border-emerald-400 hover:bg-emerald-50 font-bold"
+                      >
+                        All to True / False
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBulkSwitchNonMcType("SHORT_ANSWER")}
+                        className="flat-button-secondary text-[10px] py-1 px-2.5 bg-white text-purple-800 border-purple-400 hover:bg-purple-50 font-bold"
+                      >
+                        All to Short Answer
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-200 p-2 bg-slate-50">
                   {(() => {
@@ -448,18 +528,19 @@ D. Database management
                       const isInstruction = q.type === "INSTRUCTION";
                       if (!isInstruction) gradableNum++;
                       const displayNum = isInstruction ? "§" : gradableNum;
+                      const isExplicitMc = q.type === "MULTIPLE_CHOICE" && q.options.length > 2;
 
                       return (
                         <div
                           key={idx}
-                          className={`p-3 border text-[11px] space-y-1.5 ${
+                          className={`p-3 border text-[11px] space-y-2 ${
                             isInstruction
                               ? "bg-slate-100/70 border-slate-300"
                               : "bg-white border-slate-200"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="font-bold text-slate-900 flex items-start gap-1.5">
+                            <div className="font-bold text-slate-900 flex items-start gap-1.5 flex-1">
                               <span
                                 className={`w-4 h-4 text-white text-[10px] flex items-center justify-center font-mono shrink-0 mt-0.5 ${
                                   isInstruction ? "bg-slate-700 font-bold" : "bg-slate-900"
@@ -471,18 +552,48 @@ D. Database management
                                 {isInstruction ? `[Section Note] ${q.prompt}` : q.prompt}
                               </span>
                             </div>
-                            <span
-                              className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border shrink-0 ${
-                                isInstruction
-                                  ? "bg-slate-800 text-white border-slate-800"
-                                  : "bg-slate-100 text-slate-700 border-slate-200"
-                              }`}
-                            >
-                              {isInstruction ? "Instruction" : q.type.replace("_", " ")}
-                            </span>
+
+                            {/* Type selector or badge */}
+                            {isInstruction ? (
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border shrink-0 bg-slate-800 text-white border-slate-800">
+                                Instruction
+                              </span>
+                            ) : isExplicitMc ? (
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border shrink-0 bg-blue-50 text-blue-700 border-blue-200">
+                                Multiple Choice
+                              </span>
+                            ) : (
+                              <div className="flex items-center border border-slate-300 bg-slate-100 p-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleNonMcType(idx, "TRUE_FALSE")}
+                                  className={`px-2 py-0.5 text-[9px] font-bold transition-colors ${
+                                    q.type === "TRUE_FALSE"
+                                      ? "bg-emerald-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+                                  }`}
+                                  title="Format as True / False"
+                                >
+                                  True / False
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleNonMcType(idx, "SHORT_ANSWER")}
+                                  className={`px-2 py-0.5 text-[9px] font-bold transition-colors ${
+                                    q.type === "SHORT_ANSWER"
+                                      ? "bg-purple-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+                                  }`}
+                                  title="Format as Short Answer / Identification"
+                                >
+                                  Short Answer
+                                </button>
+                              </div>
+                            )}
                           </div>
 
-                          {q.options.length > 0 && (
+                          {/* Options / Format display */}
+                          {q.type === "MULTIPLE_CHOICE" && q.options.length > 0 && (
                             <div className="pl-5 text-slate-600 space-y-0.5">
                               {q.options.map((opt, oIdx) => {
                                 const isCorrect = q.correctAnswers.includes(opt);
@@ -508,15 +619,32 @@ D. Database management
                             </div>
                           )}
 
-                          {q.correctAnswers.length === 0 && (
-                            <div className="pl-5 text-amber-600 italic text-[10px]">
-                              {q.type === "SHORT_ANSWER"
-                                ? "(Identification item: type correct answer in builder)"
-                                : q.type === "INSTRUCTION"
-                                ? "(Instructional section note - not graded, 0 pts)"
-                                : q.type === "TRUE_FALSE"
-                                ? "(True / False: select True or False in builder)"
-                                : "(Multiple choice: click correct choice radio button in builder)"}
+                          {q.type === "TRUE_FALSE" && (
+                            <div className="pl-5 flex flex-wrap items-center gap-2">
+                              <span className="px-2 py-0.5 border border-slate-300 bg-slate-50 text-[10px] font-bold text-slate-700">
+                                True
+                              </span>
+                              <span className="px-2 py-0.5 border border-slate-300 bg-slate-50 text-[10px] font-bold text-slate-700">
+                                False
+                              </span>
+                              <span className="text-[10px] text-amber-600 italic">
+                                (Answer left blank — select in quiz builder or import answer key)
+                              </span>
+                            </div>
+                          )}
+
+                          {q.type === "SHORT_ANSWER" && (
+                            <div className="pl-5 flex items-center gap-2 text-slate-500 italic text-[10px]">
+                              <span className="border border-dashed border-slate-300 px-2 py-0.5 bg-slate-50 text-slate-400 font-mono">
+                                ________
+                              </span>
+                              <span>(Identification — answer left blank to type in builder or import answer key)</span>
+                            </div>
+                          )}
+
+                          {isInstruction && (
+                            <div className="pl-5 text-slate-500 italic text-[10px]">
+                              (Instructional section note — not graded, 0 pts)
                             </div>
                           )}
                         </div>
@@ -548,8 +676,8 @@ D. Database management
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>
               {parsedQuestions.length > 0
-                ? summary?.instructions
-                  ? `Import ${summary.total - summary.instructions} Questions (+${summary.instructions} Section Notes)`
+                ? activeSummary?.instructions
+                  ? `Import ${activeSummary.total - activeSummary.instructions} Questions (+${activeSummary.instructions} Section Notes)`
                   : `Import ${parsedQuestions.length} Questions into Quiz`
                 : "Import Questions"}
             </span>
