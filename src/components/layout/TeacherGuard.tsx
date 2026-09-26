@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { useSession } from "next-auth/react";
+import React, { useEffect, useRef } from "react";
+import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 
 export default function TeacherGuard({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const isTerminatingRef = useRef(false);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -33,6 +34,54 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
       }
     }
   }, [session, status, pathname, router]);
+
+  // Real-time account liveness check: if admin deletes this teacher, auto logout immediately
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.email) return;
+
+    let isMounted = true;
+
+    async function checkAccountLiveness() {
+      if (isTerminatingRef.current || !isMounted) return;
+
+      try {
+        const res = await fetch("/api/teacher/auth-status", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 401 || data.isDeleted) {
+          isTerminatingRef.current = true;
+          // Account was deleted by admin! Force instant logout and redirect
+          await signOut({ callbackUrl: "/teacher/login?deleted=1", redirect: true });
+        }
+      } catch {
+        // Network/offline error, don't log out
+      }
+    }
+
+    // Check every 3 seconds
+    const interval = setInterval(checkAccountLiveness, 3000);
+
+    // Also check immediately when window gains focus or tab becomes visible
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        checkAccountLiveness();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibility);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener("focus", handleVisibility);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [status, session]);
 
   if (status === "loading" && !session) {
     return (

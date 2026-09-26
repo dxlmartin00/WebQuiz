@@ -26,8 +26,12 @@ function TeacherLoginForm() {
     }
   }, [status, session, router]);
 
+  const isDeleted = searchParams.get("deleted") === "1" || authError === "account_deleted";
+
   useEffect(() => {
-    if (authError) {
+    if (isDeleted) {
+      setError("Your faculty account was removed by the administrator. You have been automatically signed out.");
+    } else if (authError) {
       if (authError === "OAuthSignin" || authError === "OAuthCallback" || authError === "Configuration") {
         setError(
           "Google OAuth configuration error. Please verify Authorized Redirect URIs in your Google Cloud Console."
@@ -36,7 +40,7 @@ function TeacherLoginForm() {
         setError(`Authentication issue (${authError}). Please try signing in again.`);
       }
     }
-  }, [authError]);
+  }, [authError, isDeleted]);
 
   const handleGoogleLogin = () => {
     setLoading(true);

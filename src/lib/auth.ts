@@ -117,15 +117,43 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user && token.email) {
-        session.user.id = (token.id as string) || (token.sub as string);
-        session.user.role = (token.role as string) || "TEACHER";
-        session.user.isApproved = token.isApproved !== undefined ? (token.isApproved as boolean) : false;
-        session.user.email = token.email as string;
-
         const email = (token.email as string).toLowerCase().trim();
-        if (isSystemAdmin(email)) {
+        const isAdmin = isSystemAdmin(email);
+
+        if (isAdmin) {
+          session.user.id = (token.id as string) || (token.sub as string);
           session.user.role = "ADMIN";
           session.user.isApproved = true;
+          session.user.email = email;
+          return session;
+        }
+
+        // For regular teachers, verify they still exist in the database (handles admin deletion in real-time)
+        try {
+          const teacher = await prisma.teacher.findUnique({
+            where: { email },
+            select: { id: true, role: true, isApproved: true },
+          });
+
+          if (!teacher) {
+            // Teacher account was deleted by an admin! Expire and nullify session
+            return {
+              ...session,
+              user: undefined as any,
+              expires: new Date(0).toISOString(),
+            };
+          }
+
+          session.user.id = teacher.id;
+          session.user.role = teacher.role;
+          session.user.isApproved = teacher.isApproved;
+          session.user.email = email;
+        } catch (e) {
+          console.error("Session teacher existence verification error:", e);
+          session.user.id = (token.id as string) || (token.sub as string);
+          session.user.role = (token.role as string) || "TEACHER";
+          session.user.isApproved = token.isApproved !== undefined ? (token.isApproved as boolean) : false;
+          session.user.email = email;
         }
       }
       return session;

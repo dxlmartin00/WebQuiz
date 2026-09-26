@@ -25,9 +25,15 @@ export default function PendingApprovalPage() {
           cache: "no-store",
           headers: { "Cache-Control": "no-cache" },
         });
-        if (!res.ok) return;
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 401 || data.isDeleted) {
+          isNavigatingRef.current = true;
+          await signOut({ callbackUrl: "/teacher/login?deleted=1", redirect: true });
+          return;
+        }
+
         if (data.isApproved && isMounted && !isNavigatingRef.current) {
           isNavigatingRef.current = true;
           setIsApproved(true);
@@ -62,17 +68,22 @@ export default function PendingApprovalPage() {
         cache: "no-store",
         headers: { "Cache-Control": "no-cache" },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.isApproved) {
-          isNavigatingRef.current = true;
-          setIsApproved(true);
-          try {
-            await update();
-          } catch {}
-          router.replace("/teacher/dashboard");
-          return;
-        }
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401 || data.isDeleted) {
+        isNavigatingRef.current = true;
+        await signOut({ callbackUrl: "/teacher/login?deleted=1", redirect: true });
+        return;
+      }
+
+      if (data.isApproved) {
+        isNavigatingRef.current = true;
+        setIsApproved(true);
+        try {
+          await update();
+        } catch {}
+        router.replace("/teacher/dashboard");
+        return;
       }
     } catch {}
     finally {

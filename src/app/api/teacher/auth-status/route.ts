@@ -10,35 +10,51 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json(
-        { authenticated: false, isApproved: false },
+        { authenticated: false, isApproved: false, isDeleted: true },
         { status: 401 }
       );
     }
 
+    const email = session.user.email.toLowerCase().trim();
     const teacher = await prisma.teacher.findUnique({
-      where: { email: session.user.email.toLowerCase().trim() },
+      where: { email },
       select: { id: true, isApproved: true, role: true },
     });
 
     if (!teacher) {
-      return NextResponse.json({
-        authenticated: true,
-        isApproved: false,
-        notRegistered: true,
-      });
+      return NextResponse.json(
+        {
+          authenticated: false,
+          isApproved: false,
+          isDeleted: true,
+          error: "Account has been deleted by an administrator.",
+        },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+          },
+        }
+      );
     }
 
-    return NextResponse.json({
-      authenticated: true,
-      isApproved: !!teacher.isApproved,
-      role: teacher.role,
-    }, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
+    return NextResponse.json(
+      {
+        authenticated: true,
+        isApproved: !!teacher.isApproved,
+        role: teacher.role,
+        isDeleted: false,
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("Auth status check error:", error);
     return NextResponse.json(
