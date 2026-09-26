@@ -34,7 +34,7 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
     }
   }, [session, status, pathname, router]);
 
-  if (status === "loading") {
+  if (status === "loading" && !session) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="text-center space-y-2">
