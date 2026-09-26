@@ -267,16 +267,22 @@ export function AnswerKeyModal({
                         }`}
                       >
                         <td className="px-3 py-2 text-center font-mono font-bold text-slate-500 text-[11px]">
-                          {m.questionNumber}
+                          {m.type === "INSTRUCTION" ? "§" : m.questionNumber}
                         </td>
                         <td className="px-3 py-2 max-w-xs truncate font-medium text-slate-900" title={m.prompt}>
-                          {m.prompt}
+                          {m.type === "INSTRUCTION" ? (
+                            <span className="text-slate-500 italic">[Section Note] {m.prompt}</span>
+                          ) : (
+                            m.prompt
+                          )}
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-indigo-800 font-bold">
-                          {m.rawKey ? m.rawKey : <span className="text-slate-300 italic font-normal">(empty)</span>}
+                          {m.type === "INSTRUCTION" ? "-" : m.rawKey ? m.rawKey : <span className="text-slate-300 italic font-normal">(empty)</span>}
                         </td>
                         <td className="px-3 py-2">
-                          {m.resolvedAnswer ? (
+                          {m.type === "INSTRUCTION" ? (
+                            <span className="text-slate-400 text-[11px] italic">Not graded</span>
+                          ) : m.resolvedAnswer ? (
                             <span className="font-mono text-slate-900 font-semibold text-[11px]">
                               {m.resolvedAnswer}
                             </span>
@@ -287,7 +293,11 @@ export function AnswerKeyModal({
                           )}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          {m.isMatched ? (
+                          {m.type === "INSTRUCTION" ? (
+                            <span className="inline-flex items-center text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5">
+                              Note
+                            </span>
+                          ) : m.isMatched ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-300 px-1.5 py-0.5">
                               <Check className="w-3 h-3" />
                               <span>Matched</span>

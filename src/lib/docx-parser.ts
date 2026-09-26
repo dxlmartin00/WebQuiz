@@ -5,6 +5,7 @@ export interface DocxParseSummary {
   multipleChoice: number;
   trueFalse: number;
   shortAnswer: number;
+  instructions: number;
   withAnswers: number;
   withoutAnswers: number;
 }
@@ -21,6 +22,17 @@ interface RawQuestionBlock {
   optionLines: string[];
   answerLine?: string;
 }
+
+type ParsedItem =
+  | {
+      kind: "INSTRUCTION";
+      prompt: string;
+    }
+  | {
+      kind: "QUESTION";
+      block: RawQuestionBlock;
+      sectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null;
+    };
 
 /**
  * Normalizes text from Word documents:
@@ -39,22 +51,28 @@ export function cleanWordText(text: string): string {
 }
 
 /**
- * Checks if a line is an exam header, title, or directions to skip
+ * Checks if a line is an exam header, personal student info/metadata, or formatting line to skip.
  */
 function isIgnoredHeaderLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return true;
 
   const ignorePatterns = [
-    /^(?:test|part|section)\s+[ivxlcdm0-9]+[:\.\-]?\s*.*$/i,
-    /^(?:multiple choice|true or false|identification|enumeration|matching type|short answer|essay)[:\.\-]?\s*.*$/i,
-    /^(?:directions?|instructions?|general directions?|choose the best answer|write the name|write the correct)[:\.\-]?\s*.*$/i,
-    /^(?:name|date|score|class|section|subject|teacher|grade|course|year)[:\.\-]?\s*_{2,}.*$/i,
-    /^(?:name|date|score|class|section|subject|teacher|grade|course|year)\s*:.*$/i,
-    /^(?:prelim|midterm|semi-final|final|finals|quarterly|diagnostic)\s+(?:exam|examination|quiz|test|assessment).*$/i,
-    /^(?:college|university|department|school|institute|academy)\s+of\s+.*$/i,
+    // Student & exam form blanks
+    /^(?:name|date|score|class|section|subject|teacher|instructor|grade|course|year|student\s*no|lrn|id\s*(?:no)?)\s*[:\.\-]/i,
+    /^(?:name|date|score|class|section|subject|teacher|instructor|grade|course|year)\s*_{2,}/i,
+    // School / college headers
+    /^(?:college|university|department|school|institute|academy|faculty)\s+(?:of|in)\s+/i,
+    /^(?:republic\s+of\s+the\s+philippines|deped|ched|senior\s+high\s+school|junior\s+high\s+school|elementary\s+school)/i,
+    // Exam title / term banner
+    /^(?:prelim|midterm|semi-final|final|finals|quarterly|diagnostic|periodical|summative)\s+(?:exam|examination|quiz|test|assessment)/i,
+    /^quiz\s*#?\s*\d+/i,
+    /^(?:first|second|third|fourth)\s+(?:grading|quarter|periodical)\s+(?:exam|examination|test)/i,
+    // Formatting lines & notes
     /^[=\-_*~]{3,}$/,
     /^\(no\s+(?:answer|key)(?:\s+provided)?\)$/i,
+    /^page\s+\d+(\s+of\s+\d+)?$/i,
+    /^\d+\s*\/\s*\d+$/i,
   ];
 
   return ignorePatterns.some((pattern) => pattern.test(trimmed));
@@ -66,6 +84,84 @@ function isIgnoredHeaderLine(line: string): boolean {
 function isBlankPlaceholder(text: string): boolean {
   const clean = text.trim();
   return /^[_.\s\-]{2,}$/.test(clean);
+}
+
+/**
+ * Detects section headers like "Part II - True or False", "Test I: Multiple Choice", etc.
+ */
+function isSectionHeader(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  if (/^(?:part|test|section)\s+(?:[ivxlcdm]+|\d+|[a-z])\b/i.test(trimmed)) {
+    return true;
+  }
+
+  if (
+    /^(?:true\s*(?:\/|\s*or\s*)\s*false|multiple\s+choice|identification|enumeration|matching\s+type|short\s+answer|fill\s+in\s+the\s+blanks?|essay)[:\.\-]?$/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detects direction / instruction lines like "Directions: Write TRUE if...", "Write TRUE if...", etc.
+ */
+function isDirectionLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  if (/^(?:(?:general\s+)?(?:directions?|instructions?)|guidelines?)\s*[:\.\-]/i.test(trimmed)) {
+    return true;
+  }
+
+  const directionPhrases = [
+    /^write\s+(?:true|t)\s+if\s+.*(?:false|f)\s+if\s+/i,
+    /^write\s+true\s+if\s+the\s+statement\s+is\s+correct/i,
+    /^write\s+t\s+if\s+the\s+statement\s+is\s+true/i,
+    /^write\s+(?:true\s+or\s+false|t\s+or\s+f)\b/i,
+    /^(?:choose|select)\s+the\s+(?:letter\s+of\s+the\s+)?(?:best|correct)\s+answer/i,
+    /^read\s+each\s+(?:statement|question)\s+carefully/i,
+    /^write\s+the\s+(?:correct\s+)?(?:letter|name|word|term)\b/i,
+    /^fill\s+in\s+the\s+blanks?\b/i,
+    /^identify\s+what\s+is\s+being\s+described\b/i,
+  ];
+
+  return directionPhrases.some((p) => p.test(trimmed));
+}
+
+/**
+ * Infers the active question type from section header or direction text
+ */
+function detectSectionType(text: string): "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null {
+  if (
+    /\btrue\s*(?:\/|\s*or\s*)\s*false\b/i.test(text) ||
+    /\bwrite\s+(?:true|t)\b/i.test(text) ||
+    /\bt\s*\/\s*f\b/i.test(text)
+  ) {
+    return "TRUE_FALSE";
+  }
+
+  if (
+    /\bmultiple\s+choice\b/i.test(text) ||
+    /\bchoose\s+the\s+(?:letter|best|correct)\b/i.test(text)
+  ) {
+    return "MULTIPLE_CHOICE";
+  }
+
+  if (
+    /\b(?:identification|short\s+answer|fill\s+in\s+the\s+blanks?|write\s+the\s+(?:correct\s+)?(?:term|word|name))\b/i.test(
+      text
+    )
+  ) {
+    return "SHORT_ANSWER";
+  }
+
+  return null;
 }
 
 /**
@@ -97,118 +193,194 @@ function splitHorizontalOptions(line: string): string[] {
 
 /**
  * Parses raw text extracted from a .docx file or pasted text into structured QuestionDraft objects.
+ * Automatically recognizes section headers & directions, turns them into INSTRUCTION cards,
+ * and uses section context (e.g. Part II - True or False) to correctly type questions without explicit options.
  */
 export function parseDocxQuestions(rawText: string): DocxParseResult {
   const cleaned = cleanWordText(rawText);
   const rawLines = cleaned.split("\n").map((l) => l.trim());
 
-  // Patterns
-  const questionNumberRegex = /^(?:Q(?:uestion)?\s*)?(\d+)[\.\)\-:]\s*(.*)$/i;
+  // Question numbering regex (supports "1. Prompt", "13) Prompt", "___ 13. Prompt", "( ) 13. Prompt", "Q13: Prompt")
+  const questionNumberRegex = /^(?:(?:[_\.\s\-]{2,}|\([_\s]*\)|\b[A-Za-z]?\b[_\.\s]{2,})\s*)?(?:Q(?:uestion)?\s*)?(\d+)[\.\)\-:]\s*(.*)$/i;
   const singleOptionRegex = /^[\*•\-]?\s*\(?([A-Ha-h])\)?[.:\-]\s*(.*)$/i;
   const answerLineRegex = /^(?:Ans(?:wer)?|Key|Correct(?:\s*Answer)?|Key\s*Answer)[\s.:\-]+(.*)$/i;
 
-  const blocks: RawQuestionBlock[] = [];
+  const items: ParsedItem[] = [];
   let currentBlock: RawQuestionBlock | null = null;
-  let hasEncounteredNumberedQuestion = false;
+  let currentBlockSectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null = null;
+  let activeSectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null = null;
+  let pendingInstructionLines: string[] = [];
+
+  const flushQuestion = () => {
+    if (currentBlock) {
+      items.push({
+        kind: "QUESTION",
+        block: currentBlock,
+        sectionType: currentBlockSectionType,
+      });
+      currentBlock = null;
+      currentBlockSectionType = null;
+    }
+  };
+
+  const flushInstruction = () => {
+    if (pendingInstructionLines.length > 0) {
+      const text = pendingInstructionLines.join("\n").trim();
+      if (text) {
+        items.push({
+          kind: "INSTRUCTION",
+          prompt: text,
+        });
+      }
+      pendingInstructionLines = [];
+    }
+  };
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
     if (!line) continue;
 
-    // Check if line is a question start: "1. Prompt...", "1) Prompt...", "Q1: Prompt..."
-    const qMatch = line.match(questionNumberRegex);
+    // 1. Skip personal metadata and overall exam document headers
+    if (isIgnoredHeaderLine(line)) {
+      continue;
+    }
 
-    if (qMatch) {
-      hasEncounteredNumberedQuestion = true;
-      if (currentBlock) {
-        blocks.push(currentBlock);
+    // 2. Check if this line is a Section Header or Direction line
+    const isSec = isSectionHeader(line);
+    const isDir = isDirectionLine(line);
+
+    if (isSec || isDir) {
+      // Flush previous question if one was in progress
+      flushQuestion();
+
+      const detected = detectSectionType(line);
+      if (detected) {
+        activeSectionType = detected;
       }
+
+      pendingInstructionLines.push(line);
+      continue;
+    }
+
+    // 3. Check if line is a numbered question start
+    const qMatch = line.match(questionNumberRegex);
+    if (qMatch) {
+      // Flush any pending instruction card (which immediately precedes this question)
+      flushInstruction();
+      // Flush previous question
+      flushQuestion();
+
       currentBlock = {
         number: qMatch[1],
         promptLines: [qMatch[2].trim()],
         optionLines: [],
       };
+      currentBlockSectionType = activeSectionType;
       continue;
     }
 
-    // If we haven't encountered any numbered question yet, all lines are header/instructions/metadata
-    if (!hasEncounteredNumberedQuestion) {
-      continue;
-    }
-
-    // Check if line is a blank line for students like "Answer: _____________"
-    const ansMatch = line.match(answerLineRegex);
-    if (ansMatch) {
-      const candidateAns = ansMatch[1].trim();
-      // If it's just blanks (underscores/dots), it's a student fill-in space, not an answer key!
-      if (!isBlankPlaceholder(candidateAns) && candidateAns.length > 0) {
-        currentBlock!.answerLine = candidateAns;
+    // 4. If we are accumulating section instructions before the first question of this section:
+    if (pendingInstructionLines.length > 0 && !currentBlock) {
+      if (isBlankPlaceholder(line)) {
+        continue;
       }
-      continue;
-    }
-
-    // Check for options (including horizontally stacked options)
-    const horizontalSplit = splitHorizontalOptions(line);
-    let allPartsAreOptions = true;
-
-    for (const part of horizontalSplit) {
-      if (!singleOptionRegex.test(part)) {
-        allPartsAreOptions = false;
-        break;
+      const detected = detectSectionType(line);
+      if (detected) {
+        activeSectionType = detected;
       }
-    }
-
-    if (allPartsAreOptions && horizontalSplit.length > 0) {
-      currentBlock!.optionLines.push(...horizontalSplit);
+      pendingInstructionLines.push(line);
       continue;
     }
 
-    // Single option line
-    if (singleOptionRegex.test(line)) {
-      currentBlock!.optionLines.push(line);
-      continue;
-    }
+    // 5. If we have a current question block:
+    if (currentBlock) {
+      // Student answer line or key line
+      const ansMatch = line.match(answerLineRegex);
+      if (ansMatch) {
+        const candidateAns = ansMatch[1].trim();
+        if (!isBlankPlaceholder(candidateAns) && candidateAns.length > 0) {
+          currentBlock.answerLine = candidateAns;
+        }
+        continue;
+      }
 
-    // Ignored section or test headers in the middle of document
-    if (isIgnoredHeaderLine(line)) {
-      continue;
-    }
+      // Check for options (including horizontally stacked options)
+      const horizontalSplit = splitHorizontalOptions(line);
+      let allPartsAreOptions = true;
 
-    // Blank line placeholders on their own line (e.g. "_____________")
-    if (isBlankPlaceholder(line)) {
-      continue;
-    }
+      for (const part of horizontalSplit) {
+        if (!singleOptionRegex.test(part)) {
+          allPartsAreOptions = false;
+          break;
+        }
+      }
 
-    // Continuation of prompt or choice
-    if (currentBlock!.optionLines.length === 0) {
-      currentBlock!.promptLines.push(line);
-    } else {
-      // Continuation of previous option
-      const lastIndex = currentBlock!.optionLines.length - 1;
-      currentBlock!.optionLines[lastIndex] += " " + line;
+      if (allPartsAreOptions && horizontalSplit.length > 0) {
+        currentBlock.optionLines.push(...horizontalSplit);
+        continue;
+      }
+
+      // Single option line
+      if (singleOptionRegex.test(line)) {
+        currentBlock.optionLines.push(line);
+        continue;
+      }
+
+      // Blank line placeholder on its own line: skip
+      if (isBlankPlaceholder(line)) {
+        continue;
+      }
+
+      // Continuation of prompt or choice
+      if (currentBlock.optionLines.length === 0) {
+        currentBlock.promptLines.push(line);
+      } else {
+        const lastIndex = currentBlock.optionLines.length - 1;
+        currentBlock.optionLines[lastIndex] += " " + line;
+      }
     }
   }
 
-  if (currentBlock) {
-    blocks.push(currentBlock);
-  }
+  // Flush remaining blocks
+  flushInstruction();
+  flushQuestion();
 
-  // Fallback: If no numbered questions were found, check if there are paragraph questions (e.g. ending with ?)
-  if (blocks.length === 0) {
+  // Fallback: If no numbered questions were found, check if there are paragraph questions ending with ?
+  const questionCount = items.filter((it) => it.kind === "QUESTION").length;
+  if (questionCount === 0) {
     for (const line of rawLines) {
       if (line && !isIgnoredHeaderLine(line) && line.endsWith("?")) {
-        blocks.push({
-          promptLines: [line],
-          optionLines: [],
+        items.push({
+          kind: "QUESTION",
+          block: {
+            promptLines: [line],
+            optionLines: [],
+          },
+          sectionType: activeSectionType,
         });
       }
     }
   }
 
-  // Convert raw question blocks to QuestionDraft[]
+  // Convert parsed items to QuestionDraft[]
   const questions: QuestionDraft[] = [];
 
-  for (const block of blocks) {
+  for (const item of items) {
+    if (item.kind === "INSTRUCTION") {
+      questions.push({
+        type: "INSTRUCTION",
+        prompt: item.prompt,
+        points: 0,
+        options: [],
+        correctAnswers: [],
+        isCaseSensitive: false,
+        allowFuzzy: false,
+        fuzzyThreshold: 1,
+      });
+      continue;
+    }
+
+    const block = item.block;
     let prompt = block.promptLines
       .filter(Boolean)
       .join(" ")
@@ -263,7 +435,9 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       block.answerLine !== undefined &&
       /^(?:true|false|t|f)$/i.test(block.answerLine.trim());
 
-    if (isExplicitTrueFalseChoices || isPromptTrueFalse || (isAnswerTrueFalse && rawOptions.length <= 2)) {
+    const isSectionTrueFalse = item.sectionType === "TRUE_FALSE" && rawOptions.length <= 2;
+
+    if (isExplicitTrueFalseChoices || isPromptTrueFalse || isSectionTrueFalse || (isAnswerTrueFalse && rawOptions.length <= 2)) {
       type = "TRUE_FALSE";
       normalizedOptions.push("True", "False");
 
@@ -338,25 +512,28 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       prompt,
       points: 1,
       options: normalizedOptions,
-      correctAnswers, // If document has no answer key, left empty for instructor to select
+      correctAnswers,
       isCaseSensitive: false,
       allowFuzzy: type === "SHORT_ANSWER",
       fuzzyThreshold: 1,
     });
   }
 
+  const gradableQuestions = questions.filter((q) => q.type !== "INSTRUCTION");
+
   const summary: DocxParseSummary = {
     total: questions.length,
     multipleChoice: questions.filter((q) => q.type === "MULTIPLE_CHOICE").length,
     trueFalse: questions.filter((q) => q.type === "TRUE_FALSE").length,
     shortAnswer: questions.filter((q) => q.type === "SHORT_ANSWER").length,
-    withAnswers: questions.filter((q) => q.correctAnswers.length > 0).length,
-    withoutAnswers: questions.filter((q) => q.correctAnswers.length === 0).length,
+    instructions: questions.filter((q) => q.type === "INSTRUCTION").length,
+    withAnswers: gradableQuestions.filter((q) => q.correctAnswers.length > 0).length,
+    withoutAnswers: gradableQuestions.filter((q) => q.correctAnswers.length === 0).length,
   };
 
   return {
     questions,
     summary,
-    rawItemCount: blocks.length,
+    rawItemCount: questions.length,
   };
 }

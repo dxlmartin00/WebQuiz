@@ -124,10 +124,10 @@ export function DocxImportModal({
   const handleConfirmImport = () => {
     if (parsedQuestions.length === 0) return;
 
-    // Apply points
+    // Apply points (instruction items must always have 0 points)
     const finalQuestions = parsedQuestions.map((q) => ({
       ...q,
-      points: Number(defaultPoints) || 1,
+      points: q.type === "INSTRUCTION" ? 0 : (Number(defaultPoints) || 1),
     }));
 
     onImport(finalQuestions, importMode);
@@ -323,7 +323,7 @@ D. Database management
               />
               <div className="flex justify-between items-center">
                 <p className="text-[11px] text-slate-400">
-                  Headers like "Part I - Multiple Choice" and student blanks "Answer: ______" are filtered automatically.
+                  Section headers (e.g. Part II - True or False) and directions are automatically imported as section text fields.
                 </p>
                 <button
                   type="button"
@@ -354,23 +354,37 @@ D. Database management
           {summary && parsedQuestions.length > 0 && (
             <div className="space-y-4 pt-2 animate-in fade-in">
               {/* Summary Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div
+                className={`grid gap-2.5 ${
+                  summary.instructions > 0
+                    ? "grid-cols-2 sm:grid-cols-5"
+                    : "grid-cols-2 sm:grid-cols-4"
+                }`}
+              >
                 <div className="p-3 bg-slate-100 border border-slate-200">
-                  <div className="text-[10px] uppercase font-bold text-slate-500">Total Items</div>
-                  <div className="text-lg font-black text-slate-900">{summary.total}</div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500">Total Questions</div>
+                  <div className="text-lg font-black text-slate-900">
+                    {summary.total - (summary.instructions || 0)}
+                  </div>
                 </div>
                 <div className="p-3 bg-blue-50 border border-blue-200">
                   <div className="text-[10px] uppercase font-bold text-blue-600">Multiple Choice</div>
                   <div className="text-lg font-black text-blue-900">{summary.multipleChoice}</div>
                 </div>
-                <div className="p-3 bg-purple-50 border border-purple-200">
-                  <div className="text-[10px] uppercase font-bold text-purple-600">Short Answer / ID</div>
-                  <div className="text-lg font-black text-purple-900">{summary.shortAnswer}</div>
-                </div>
                 <div className="p-3 bg-emerald-50 border border-emerald-200">
                   <div className="text-[10px] uppercase font-bold text-emerald-600">True / False</div>
                   <div className="text-lg font-black text-emerald-900">{summary.trueFalse}</div>
                 </div>
+                <div className="p-3 bg-purple-50 border border-purple-200">
+                  <div className="text-[10px] uppercase font-bold text-purple-600">Short Answer / ID</div>
+                  <div className="text-lg font-black text-purple-900">{summary.shortAnswer}</div>
+                </div>
+                {summary.instructions > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200">
+                    <div className="text-[10px] uppercase font-bold text-amber-700">Section Notes</div>
+                    <div className="text-lg font-black text-amber-900">{summary.instructions}</div>
+                  </div>
+                )}
               </div>
 
               {/* Import Options: Points & Mode */}
@@ -428,60 +442,87 @@ D. Database management
                 </div>
 
                 <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-200 p-2 bg-slate-50">
-                  {parsedQuestions.map((q, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-white border border-slate-200 text-[11px] space-y-1.5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                          <span className="w-4 h-4 bg-slate-800 text-white text-[10px] flex items-center justify-center font-mono">
-                            {idx + 1}
-                          </span>
-                          <span className="line-clamp-2">{q.prompt}</span>
-                        </div>
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                          {q.type.replace("_", " ")}
-                        </span>
-                      </div>
+                  {(() => {
+                    let gradableNum = 0;
+                    return parsedQuestions.map((q, idx) => {
+                      const isInstruction = q.type === "INSTRUCTION";
+                      if (!isInstruction) gradableNum++;
+                      const displayNum = isInstruction ? "§" : gradableNum;
 
-                      {q.options.length > 0 && (
-                        <div className="pl-5 text-slate-600 space-y-0.5">
-                          {q.options.map((opt, oIdx) => {
-                            const isCorrect = q.correctAnswers.includes(opt);
-                            return (
-                              <div
-                                key={oIdx}
-                                className={`flex items-center gap-1 ${
-                                  isCorrect ? "font-bold text-emerald-700" : ""
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 border text-[11px] space-y-1.5 ${
+                            isInstruction
+                              ? "bg-slate-100/70 border-slate-300"
+                              : "bg-white border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-bold text-slate-900 flex items-start gap-1.5">
+                              <span
+                                className={`w-4 h-4 text-white text-[10px] flex items-center justify-center font-mono shrink-0 mt-0.5 ${
+                                  isInstruction ? "bg-slate-700 font-bold" : "bg-slate-900"
                                 }`}
                               >
-                                <span className="font-mono text-[10px]">
-                                  {String.fromCharCode(65 + oIdx)}.
-                                </span>
-                                <span>{opt}</span>
-                                {isCorrect && (
-                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 font-semibold ml-1">
-                                    ✓ Pre-marked
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                                {displayNum}
+                              </span>
+                              <span className="whitespace-pre-line line-clamp-3">
+                                {isInstruction ? `[Section Note] ${q.prompt}` : q.prompt}
+                              </span>
+                            </div>
+                            <span
+                              className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border shrink-0 ${
+                                isInstruction
+                                  ? "bg-slate-800 text-white border-slate-800"
+                                  : "bg-slate-100 text-slate-700 border-slate-200"
+                              }`}
+                            >
+                              {isInstruction ? "Instruction" : q.type.replace("_", " ")}
+                            </span>
+                          </div>
 
-                      {q.correctAnswers.length === 0 && (
-                        <div className="pl-5 text-amber-600 italic text-[10px]">
-                          {q.type === "SHORT_ANSWER"
-                            ? "(Identification item: type correct answer in builder)"
-                            : q.type === "INSTRUCTION"
-                            ? "(Instructional section card - not graded)"
-                            : "(Multiple choice: click correct choice radio button in builder)"}
+                          {q.options.length > 0 && (
+                            <div className="pl-5 text-slate-600 space-y-0.5">
+                              {q.options.map((opt, oIdx) => {
+                                const isCorrect = q.correctAnswers.includes(opt);
+                                return (
+                                  <div
+                                    key={oIdx}
+                                    className={`flex items-center gap-1 ${
+                                      isCorrect ? "font-bold text-emerald-700" : ""
+                                    }`}
+                                  >
+                                    <span className="font-mono text-[10px]">
+                                      {String.fromCharCode(65 + oIdx)}.
+                                    </span>
+                                    <span>{opt}</span>
+                                    {isCorrect && (
+                                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 font-semibold ml-1">
+                                        ✓ Pre-marked
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {q.correctAnswers.length === 0 && (
+                            <div className="pl-5 text-amber-600 italic text-[10px]">
+                              {q.type === "SHORT_ANSWER"
+                                ? "(Identification item: type correct answer in builder)"
+                                : q.type === "INSTRUCTION"
+                                ? "(Instructional section note - not graded, 0 pts)"
+                                : q.type === "TRUE_FALSE"
+                                ? "(True / False: select True or False in builder)"
+                                : "(Multiple choice: click correct choice radio button in builder)"}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -507,7 +548,9 @@ D. Database management
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>
               {parsedQuestions.length > 0
-                ? `Import ${parsedQuestions.length} Questions into Quiz`
+                ? summary?.instructions
+                  ? `Import ${summary.total - summary.instructions} Questions (+${summary.instructions} Section Notes)`
+                  : `Import ${parsedQuestions.length} Questions into Quiz`
                 : "Import Questions"}
             </span>
           </button>

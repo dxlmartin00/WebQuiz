@@ -103,9 +103,39 @@ export function matchAnswerKeysToQuestions(
     keyMap.set(k.questionNumber, k.rawAnswer);
   }
 
+  // Detect if keys start at an offset (e.g. quiz has 12 items, but keys are 13..24)
+  const sortedKeyNums = [...keyMap.keys()].sort((a, b) => a - b);
+  let keyOffset = 0;
+  if (sortedKeyNums.length > 0 && !keyMap.has(1) && sortedKeyNums[0] > 1) {
+    keyOffset = sortedKeyNums[0] - 1;
+  }
+
+  let gradableCounter = 0;
+
   return questions.map((q, idx) => {
-    const questionNumber = idx + 1;
-    const rawKey = keyMap.get(questionNumber) || "";
+    const isInstruction = q.type === "INSTRUCTION";
+    if (!isInstruction) {
+      gradableCounter++;
+    }
+    const questionNumber = isInstruction ? 0 : gradableCounter;
+    let rawKey = "";
+    if (!isInstruction) {
+      rawKey = keyMap.get(questionNumber) || keyMap.get(questionNumber + keyOffset) || "";
+    }
+
+    if (isInstruction) {
+      return {
+        questionIndex: idx,
+        questionNumber: 0,
+        prompt: q.prompt,
+        type: q.type,
+        options: [],
+        rawKey: "",
+        resolvedAnswer: null,
+        isMatched: false,
+        reason: "Section note (no answer required)",
+      };
+    }
 
     if (!rawKey) {
       return {
