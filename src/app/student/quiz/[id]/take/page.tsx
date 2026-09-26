@@ -47,6 +47,7 @@ export default function ActiveExamRoomPage({
 
   // Authoritative Timer state
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [itemSecondsRemaining, setItemSecondsRemaining] = useState<number | null>(null);
   const timerInitializedRef = useRef(false);
 
   // Anti-Cheating Violation state
@@ -116,6 +117,9 @@ export default function ActiveExamRoomPage({
         setData(json);
         const durationSecs = Math.max(10, json.remainingSeconds || json.quiz.durationMinutes * 60);
         setSecondsRemaining(durationSecs);
+        if (json.quiz?.timerMode === "PER_ITEM") {
+          setItemSecondsRemaining(json.quiz.timePerItemSeconds || 60);
+        }
         timerInitializedRef.current = true;
         setViolationCount(json.submission?.violationCount || 0);
         setMaxViolations(json.quiz.maxViolations || 3);
@@ -220,6 +224,55 @@ export default function ActiveExamRoomPage({
 
     return () => clearInterval(timer);
   }, [loading, data, result, secondsRemaining, handleSubmitQuiz]);
+
+  // Per-Item Advance Handler (auto-saves draft and locks prior questions)
+  const handleAdvanceItem = useCallback(
+    (isAuto = false) => {
+      if (isSubmittingRef.current || result) return;
+
+      const questions = data?.questions || [];
+      const perItemDuration = data?.quiz?.timePerItemSeconds || 60;
+
+      if (currentIdx < questions.length - 1) {
+        // Flush current answer to server draft immediately
+        const currQ = questions[currentIdx];
+        if (currQ && answers[currQ.id] !== undefined) {
+          fetch(`/api/student/quiz/${id}/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answers: { [currQ.id]: answers[currQ.id] } }),
+          }).catch(() => {});
+        }
+
+        setCurrentIdx((p) => p + 1);
+        setItemSecondsRemaining(perItemDuration);
+      } else {
+        // Final question reached or expired!
+        handleSubmitQuiz(isAuto);
+      }
+    },
+    [currentIdx, data, answers, id, result, handleSubmitQuiz]
+  );
+
+  // Per-Item Countdown Timer
+  useEffect(() => {
+    const isPerItem = data?.quiz?.timerMode === "PER_ITEM";
+    if (!isPerItem || loading || !data || result || itemSecondsRemaining === null || offlineSubmitModal) return;
+
+    const timer = setInterval(() => {
+      setItemSecondsRemaining((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleAdvanceItem(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [data, loading, result, itemSecondsRemaining, offlineSubmitModal, handleAdvanceItem]);
 
   // Log Violation Helper
   const recordViolation = useCallback(
@@ -485,6 +538,8 @@ export default function ActiveExamRoomPage({
   }
 
   const { quiz, questions } = data;
+  const isPerItem = quiz?.timerMode === "PER_ITEM";
+  const perItemDuration = quiz?.timePerItemSeconds || 60;
   const currentQuestion = questions[currentIdx];
   const gradableQuestions = questions.filter((q: any) => q.type !== "INSTRUCTION");
   const answeredCount = Object.keys(answers).filter(
@@ -493,7 +548,9 @@ export default function ActiveExamRoomPage({
       answers[k] !== "[]" &&
       questions.find((q: any) => q.id === k)?.type !== "INSTRUCTION"
   ).length;
-  const isTimeCritical = secondsRemaining !== null && secondsRemaining <= 120;
+  const isTimeCritical = isPerItem
+    ? itemSecondsRemaining !== null && itemSecondsRemaining <= 10
+    : secondsRemaining !== null && secondsRemaining <= 120;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none exam-lockdown">
@@ -515,11 +572,15 @@ export default function ActiveExamRoomPage({
             className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 font-mono text-xs sm:text-sm font-black border shrink-0 ${
               isTimeCritical
                 ? "bg-rose-950/90 border-rose-500 text-rose-400 animate-pulse"
+                : isPerItem
+                ? "bg-amber-950/80 border-amber-500 text-amber-300"
                 : "bg-slate-800 border-slate-700 text-white"
             }`}
           >
-            <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isTimeCritical ? "text-rose-400" : "text-indigo-400"} shrink-0`} />
-            <span>{formatTime(secondsRemaining)}</span>
+            <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isTimeCritical ? "text-rose-400" : isPerItem ? "text-amber-400" : "text-indigo-400"} shrink-0`} />
+            <span>
+              {isPerItem ? `Item: ${formatTime(itemSecondsRemaining)}` : formatTime(secondsRemaining)}
+            </span>
           </div>
 
           {/* Right: Network Status, Anti-Cheating Strikes & Submit Action */}
@@ -584,6 +645,20 @@ export default function ActiveExamRoomPage({
       <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Left Col: Current Question Panel */}
         <div className="lg:col-span-8 flex flex-col space-y-4">
+          {isPerItem && (
+            <div className="bg-amber-50 border border-amber-300 p-2.5 px-3.5 flex items-center justify-between text-xs text-amber-900 font-semibold shadow-2xs">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Paced Exam Mode:</strong> {perItemDuration}s per item. Past questions are locked when advancing.
+                </span>
+              </div>
+              <div className="font-mono font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 border border-amber-300 shrink-0">
+                {itemSecondsRemaining !== null ? `${itemSecondsRemaining}s left` : "--"}
+              </div>
+            </div>
+          )}
+
           <div className="flat-card p-4 sm:p-6 bg-white border-2 border-slate-900 flex-1 flex flex-col justify-between space-y-6 shadow-sm">
             <div className="space-y-4">
               {/* Question Index & Points Badge */}
@@ -728,26 +803,45 @@ export default function ActiveExamRoomPage({
             {/* Bottom Nav Buttons */}
             <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-2">
               <button
-                onClick={() => setCurrentIdx((p) => Math.max(0, p - 1))}
-                disabled={currentIdx === 0}
+                onClick={() => !isPerItem && setCurrentIdx((p) => Math.max(0, p - 1))}
+                disabled={currentIdx === 0 || isPerItem}
                 className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
+                title={isPerItem ? "Previous questions are locked in Per-Item mode" : undefined}
               >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
+                {isPerItem ? <Lock className="w-3.5 h-3.5 text-slate-400" /> : <ChevronLeft className="w-4 h-4" />}
+                <span>{isPerItem ? "Previous (Locked)" : "Previous"}</span>
               </button>
 
               <div className="text-[11px] font-mono text-slate-500">
                 {answeredCount} of {gradableQuestions.length} Answered
               </div>
 
-              <button
-                onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
-                disabled={currentIdx === questions.length - 1}
-                className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
-              >
-                <span>Next</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              {isPerItem ? (
+                <button
+                  onClick={() => {
+                    if (currentIdx === questions.length - 1) {
+                      if (confirm(`Submit your exam now? You have answered ${answeredCount} of ${gradableQuestions.length} questions.`)) {
+                        handleSubmitQuiz(false);
+                      }
+                    } else {
+                      handleAdvanceItem(false);
+                    }
+                  }}
+                  className="flat-button-primary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px]"
+                >
+                  <span>{currentIdx === questions.length - 1 ? "Finish & Submit" : "Lock & Next"}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
+                  disabled={currentIdx === questions.length - 1}
+                  className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -771,15 +865,35 @@ export default function ActiveExamRoomPage({
                 const isInstruction = q.type === "INSTRUCTION";
                 const isAnswered = !isInstruction && !!answers[q.id]?.trim() && answers[q.id] !== "[]";
                 const isCurrent = idx === currentIdx;
+                const isPastLocked = isPerItem && idx < currentIdx;
+                const isFutureLocked = isPerItem && idx > currentIdx;
+                const isLocked = isPastLocked || isFutureLocked;
 
                 return (
                   <button
                     key={q.id}
-                    onClick={() => setCurrentIdx(idx)}
-                    title={isInstruction ? `Section Note: ${q.prompt.slice(0, 30)}...` : `Question ${idx + 1}`}
+                    onClick={() => {
+                      if (!isLocked) {
+                        setCurrentIdx(idx);
+                      }
+                    }}
+                    disabled={isLocked}
+                    title={
+                      isPastLocked
+                        ? `Question ${idx + 1} (Locked - Cannot return)`
+                        : isFutureLocked
+                        ? `Question ${idx + 1} (Locked until reached)`
+                        : isInstruction
+                        ? `Section Note: ${q.prompt.slice(0, 30)}...`
+                        : `Question ${idx + 1}`
+                    }
                     className={`h-9 text-xs font-mono font-bold border transition-all flex items-center justify-center min-h-[38px] touch-manipulation ${
                       isCurrent
                         ? "bg-slate-900 text-white border-slate-900 ring-2 ring-indigo-500"
+                        : isPastLocked
+                        ? "bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed opacity-80"
+                        : isFutureLocked
+                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-50"
                         : isInstruction
                         ? "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100"
                         : isAnswered
@@ -787,7 +901,7 @@ export default function ActiveExamRoomPage({
                         : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                     }`}
                   >
-                    {isInstruction ? "§" : idx + 1}
+                    {isPastLocked ? <Lock className="w-3 h-3 text-slate-500" /> : isInstruction ? "§" : idx + 1}
                   </button>
                 );
               })}
@@ -806,10 +920,19 @@ export default function ActiveExamRoomPage({
                 <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
                 <span>Current</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-indigo-50 border border-indigo-300 inline-block" />
-                <span>Section Note</span>
-              </div>
+              {isPerItem ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 bg-slate-200 border border-slate-300 inline-block flex items-center justify-center">
+                    <Lock className="w-2 h-2 text-slate-500" />
+                  </span>
+                  <span>Locked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 bg-indigo-50 border border-indigo-300 inline-block" />
+                  <span>Section Note</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

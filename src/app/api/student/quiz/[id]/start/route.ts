@@ -192,6 +192,8 @@ export async function POST(
         subjectCode: quiz.subject.subjectCode,
         subjectTitle: quiz.subject.title,
         durationMinutes: quiz.durationMinutes,
+        timerMode: quiz.timerMode,
+        timePerItemSeconds: quiz.timePerItemSeconds,
         maxViolations: quiz.maxViolations,
         totalQuestions: quiz.questions.length,
         totalPoints: submission.totalPoints,

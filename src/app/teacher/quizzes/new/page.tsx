@@ -20,10 +20,12 @@ import {
   FileText,
   ChevronUp,
   ChevronDown,
+  KeyRound,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
+import { AnswerKeyModal } from "@/components/teacher/AnswerKeyModal";
 import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
 
 export default function NewQuizPage() {
@@ -32,18 +34,22 @@ export default function NewQuizPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Quiz Settings
   const [subjectId, setSubjectId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(20);
+  const [timerMode, setTimerMode] = useState<"WHOLE_QUIZ" | "PER_ITEM">("WHOLE_QUIZ");
+  const [timePerItemSeconds, setTimePerItemSeconds] = useState(60);
   const [maxViolations, setMaxViolations] = useState(3);
   const [deadlineAt, setDeadlineAt] = useState("");
   const [isPublished, setIsPublished] = useState(true);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleChoices, setShuffleChoices] = useState(false);
   const [isDocxModalOpen, setIsDocxModalOpen] = useState(false);
+  const [isAnswerKeyModalOpen, setIsAnswerKeyModalOpen] = useState(false);
 
   // Questions
   const [questions, setQuestions] = useState<QuestionDraft[]>([
@@ -209,6 +215,8 @@ export default function NewQuizPage() {
           title: title.trim(),
           description: description.trim(),
           durationMinutes: Number(durationMinutes) || 20,
+          timerMode,
+          timePerItemSeconds: Number(timePerItemSeconds) || 60,
           maxViolations: Number(maxViolations) || 3,
           deadlineAt: deadlineAt ? new Date(deadlineAt).toISOString() : null,
           isPublished,
@@ -282,6 +290,16 @@ export default function NewQuizPage() {
             </button>
 
             <button
+              type="button"
+              onClick={() => setIsAnswerKeyModalOpen(true)}
+              className="flat-button-secondary text-xs py-2 px-3 bg-emerald-50 border-emerald-300 text-emerald-800 font-bold flex items-center gap-1.5 hover:bg-emerald-100 transition-colors shadow-xs"
+              title="Upload answer key file or paste text to match correct answers"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Upload Answer Key</span>
+            </button>
+
+            <button
               onClick={handleSaveQuiz}
               disabled={submitting}
               className="flat-button-primary text-xs py-2 px-4 flex items-center gap-1.5"
@@ -292,6 +310,21 @@ export default function NewQuizPage() {
           </div>
         </div>
       </div>
+
+      {successToast && (
+        <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successToast}</span>
+          </div>
+          <button
+            onClick={() => setSuccessToast(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
@@ -361,22 +394,105 @@ export default function NewQuizPage() {
           />
         </div>
 
-        {/* Timing & Safeguards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-500" />
-              <span>Duration (Minutes)</span>
+        {/* Timing Mode Selection */}
+        <div className="pt-2 border-t border-slate-100 space-y-3">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+            Exam Timing Mode
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              onClick={() => setTimerMode("WHOLE_QUIZ")}
+              className={`p-3.5 border cursor-pointer flex items-start gap-3 transition-all ${
+                timerMode === "WHOLE_QUIZ"
+                  ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 font-bold ring-1 ring-indigo-500"
+                  : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+              }`}
+            >
+              <input
+                type="radio"
+                name="timerMode"
+                checked={timerMode === "WHOLE_QUIZ"}
+                onChange={() => setTimerMode("WHOLE_QUIZ")}
+                className="mt-0.5 text-indigo-600 accent-indigo-600"
+              />
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Whole Quiz Timer (Standard)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                  Single countdown clock for the entire exam. Students can move back and forth between questions anytime.
+                </p>
+              </div>
             </label>
-            <input
-              type="number"
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              min={1}
-              max={300}
-              className="flat-input text-xs font-mono"
-            />
+
+            <label
+              onClick={() => setTimerMode("PER_ITEM")}
+              className={`p-3.5 border cursor-pointer flex items-start gap-3 transition-all ${
+                timerMode === "PER_ITEM"
+                  ? "border-amber-600 bg-amber-50/70 text-amber-950 font-bold ring-1 ring-amber-500"
+                  : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+              }`}
+            >
+              <input
+                type="radio"
+                name="timerMode"
+                checked={timerMode === "PER_ITEM"}
+                onChange={() => setTimerMode("PER_ITEM")}
+                className="mt-0.5 text-amber-600 accent-amber-600"
+              />
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Duration Per Item (Paced / Speed Exam)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                  Fixed timer for each question. When time reaches 0, the answer is locked and auto-advances. Students cannot change past items.
+                </p>
+              </div>
+            </label>
           </div>
+        </div>
+
+        {/* Timing & Safeguards Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          {timerMode === "WHOLE_QUIZ" ? (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-500" />
+                <span>Quiz Duration (Minutes)</span>
+              </label>
+              <input
+                type="number"
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                min={1}
+                max={300}
+                className="flat-input text-xs font-mono"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-amber-600" />
+                <span>Seconds Per Item</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={timePerItemSeconds}
+                  onChange={(e) => setTimePerItemSeconds(Math.max(5, Number(e.target.value)))}
+                  min={5}
+                  max={600}
+                  className="flat-input text-xs font-mono pr-10"
+                />
+                <span className="absolute right-2.5 top-2 text-[11px] font-mono text-slate-400">sec</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1">
+                ~{Math.round((questions.filter(q => q.type !== 'INSTRUCTION').length * timePerItemSeconds) / 60)} min total estimated exam time.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
@@ -444,6 +560,16 @@ export default function NewQuizPage() {
             >
               <UploadCloud className="w-3.5 h-3.5 text-indigo-600" />
               <span>Upload Questionnaire (.docx / Paste)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAnswerKeyModalOpen(true)}
+              className="flat-button-secondary text-xs py-1 px-3 bg-emerald-50 border-emerald-300 text-emerald-800 font-bold flex items-center gap-1.5 hover:bg-emerald-100 transition-colors shadow-xs"
+              title="Upload answer key file or paste text to match correct answers"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Upload Answer Key</span>
             </button>
 
             <span className="text-xs text-slate-400 font-semibold mx-1">|</span>
@@ -844,6 +970,18 @@ export default function NewQuizPage() {
         onClose={() => setIsDocxModalOpen(false)}
         onImport={handleImportQuestions}
         currentQuestionCount={questions.length}
+      />
+
+      <AnswerKeyModal
+        isOpen={isAnswerKeyModalOpen}
+        onClose={() => setIsAnswerKeyModalOpen(false)}
+        questions={questions}
+        onApplyAnswers={(updatedQuestions) => {
+          setQuestions(updatedQuestions);
+          setIsAnswerKeyModalOpen(false);
+          setSuccessToast("Answer key applied successfully to your questions!");
+          setTimeout(() => setSuccessToast(null), 4000);
+        }}
       />
     </div>
   );

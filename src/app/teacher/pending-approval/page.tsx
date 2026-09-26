@@ -1,12 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { Clock, ShieldAlert, LogOut, RefreshCw } from "lucide-react";
 
 export default function PendingApprovalPage() {
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
+  const [checking, setChecking] = useState(false);
+
+  // Automatically check for admin approval every 4 seconds in the background
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await update();
+      } catch {}
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [update]);
+
+  const handleManualCheck = async () => {
+    try {
+      setChecking(true);
+      await update();
+    } catch {}
+    finally {
+      setTimeout(() => setChecking(false), 800);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
@@ -63,11 +85,12 @@ export default function PendingApprovalPage() {
 
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
-              onClick={() => window.location.reload()}
+              onClick={handleManualCheck}
+              disabled={checking}
               className="flat-button-primary text-xs py-2 px-4 w-full sm:w-auto font-bold flex items-center justify-center gap-1.5"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Check Status Again</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${checking ? "animate-spin" : ""}`} />
+              <span>{checking ? "Checking Approval..." : "Check Status Again"}</span>
             </button>
 
             <button

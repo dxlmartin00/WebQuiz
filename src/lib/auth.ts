@@ -90,6 +90,27 @@ export const authOptions: NextAuthOptions = {
             token.isApproved = true;
           }
         }
+      } else if (!token.isApproved && token.email) {
+        // If not yet approved in the cached token, dynamically check if an admin approved them
+        const email = (token.email as string).toLowerCase().trim();
+        if (isSystemAdmin(email)) {
+          token.role = "ADMIN";
+          token.isApproved = true;
+        } else {
+          try {
+            const teacher = await prisma.teacher.findUnique({
+              where: { email },
+              select: { id: true, role: true, isApproved: true },
+            });
+            if (teacher?.isApproved) {
+              token.id = teacher.id;
+              token.role = teacher.role;
+              token.isApproved = true;
+            }
+          } catch (err) {
+            console.error("JWT approval re-check error:", err);
+          }
+        }
       }
 
       return token;

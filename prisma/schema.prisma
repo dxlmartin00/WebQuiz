@@ -60,8 +60,10 @@ model Quiz {
   subject          Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   title            String
   description      String?      @db.Text
-  durationMinutes  Int          @default(30)
-  startAt          DateTime?
+  durationMinutes    Int          @default(30)
+  timerMode          String       @default("WHOLE_QUIZ") // "WHOLE_QUIZ" or "PER_ITEM"
+  timePerItemSeconds Int?         @default(60)
+  startAt            DateTime?
   deadlineAt       DateTime?
   maxViolations    Int          @default(3)
   isPublished      Boolean      @default(false)
