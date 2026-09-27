@@ -16,6 +16,9 @@ import {
   RefreshCw,
   RotateCcw,
   X,
+  ArrowUpDown,
+  TrendingUp,
+  Filter,
 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastContext";
 
@@ -30,6 +33,9 @@ export default function QuizGradebookPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [sortField, setSortField] = useState<string>("studentName");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
   const [resettingStudent, setResettingStudent] = useState<any | null>(null);
   const [isResetting, setIsResetting] = useState(false);
@@ -102,11 +108,62 @@ export default function QuizGradebookPage({
 
   const { quiz, stats, submissions } = data;
 
-  const filteredSubmissions = submissions.filter(
-    (s: any) =>
-      s.studentIdNumber.toLowerCase().includes(search.toLowerCase()) ||
-      s.studentName.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const rawSubmissions: any[] = submissions || [];
+  const submittedItems = rawSubmissions.filter((s: any) => s.hasSubmitted);
+  const scores = submittedItems.map((s: any) => s.score);
+  const highestScore = scores.length > 0 ? Math.max(...scores) : 0;
+  const lowestScore = scores.length > 0 ? Math.min(...scores) : 0;
+  const passingCount = submittedItems.filter((s: any) => (s.percentage || 0) >= 75).length;
+  const passRate =
+    submittedItems.length > 0 ? ((passingCount / submittedItems.length) * 100).toFixed(0) : "0";
+
+  const countSubmitted = rawSubmissions.filter((s: any) => s.hasSubmitted).length;
+  const countInProgress = rawSubmissions.filter((s: any) => s.status === "IN_PROGRESS").length;
+  const countNotStarted = rawSubmissions.filter((s: any) => s.status === "NOT_STARTED" || !s.status).length;
+  const countFlagged = rawSubmissions.filter((s: any) => s.violationCount > 0).length;
+
+  const filteredSubmissions = rawSubmissions
+    .filter((s: any) => {
+      const matchSearch =
+        s.studentIdNumber.toLowerCase().includes(search.toLowerCase()) ||
+        s.studentName.toLowerCase().includes(search.toLowerCase());
+
+      if (!matchSearch) return false;
+
+      if (statusFilter === "SUBMITTED") return s.hasSubmitted;
+      if (statusFilter === "IN_PROGRESS") return s.status === "IN_PROGRESS";
+      if (statusFilter === "NOT_STARTED") return s.status === "NOT_STARTED" || !s.status;
+      if (statusFilter === "FLAGGED") return s.violationCount > 0;
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      let valA: any = a[sortField];
+      let valB: any = b[sortField];
+
+      if (sortField === "score" || sortField === "percentage" || sortField === "violationCount") {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+      } else if (sortField === "submittedAt") {
+        valA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        valB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      } else {
+        valA = (valA || "").toString().toLowerCase();
+        valB = (valB || "").toString().toLowerCase();
+      }
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-7xl">
@@ -199,59 +256,162 @@ export default function QuizGradebookPage({
           </div>
         </div>
 
+        <div className="flat-card p-5 border-l-4 border-l-emerald-600 bg-white">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Score Range & Pass Rate
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-700 mt-2 font-mono">
+            {highestScore} <span className="text-xs text-slate-500 font-sans font-normal">high</span> / {lowestScore} <span className="text-xs text-slate-500 font-sans font-normal">low</span>
+          </div>
+          <div className="text-[11px] text-emerald-800 mt-1 font-semibold">
+            {passRate}% Passing (&ge; 75%)
+          </div>
+        </div>
+
         <div className="flat-card p-5 border-l-4 border-l-rose-600 bg-white">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Total Integrity Violations
+            Integrity Violations
           </div>
           <div className="text-3xl font-black text-rose-600 mt-2">
             {stats.totalViolations}
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
-            Across all student attempts
-          </div>
-        </div>
-
-        <div className="flat-card p-5 border-l-4 border-l-amber-500 bg-white">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Strike Threshold
-          </div>
-          <div className="text-3xl font-black text-slate-900 mt-2">
-            {quiz.maxViolations}{" "}
-            <span className="text-sm font-normal text-slate-500">strikes max</span>
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">
-            Auto-submit on limit reached
+            Limit: {quiz.maxViolations} strikes before auto-submit
           </div>
         </div>
       </div>
 
-      {/* Gradebook Table */}
+      {/* Gradebook Table Controls & Scorecard */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-slate-900">
-            Enrolled Student Scorecard
-          </h2>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Enrolled Student Scorecard
+            </h2>
+            <p className="text-xs text-slate-500">
+              Click table headers to sort by score, name, or violation strikes.
+            </p>
+          </div>
 
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search student ID or name..."
-            className="flat-input text-xs sm:w-64 py-1.5"
-          />
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search student ID or name..."
+              className="flat-input text-xs sm:w-64 pl-8 py-1.5"
+            />
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2">
+          {[
+            { key: "ALL", label: `All (${rawSubmissions.length})` },
+            { key: "SUBMITTED", label: `Submitted (${countSubmitted})` },
+            { key: "IN_PROGRESS", label: `In Progress (${countInProgress})` },
+            { key: "NOT_STARTED", label: `Not Started (${countNotStarted})` },
+            { key: "FLAGGED", label: `Flagged Strikes (${countFlagged})` },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setStatusFilter(tab.key)}
+              className={`text-xs px-2.5 py-1 font-bold transition-all border ${
+                statusFilter === tab.key
+                  ? "bg-slate-900 text-white border-slate-900 shadow-2xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div className="flat-card bg-white border border-slate-200 overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3">Student ID</th>
-                <th className="px-4 py-3">Name</th>
+                <th
+                  onClick={() => handleSort("studentIdNumber")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Student ID</span>
+                    {sortField === "studentIdNumber" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("studentName")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Name</span>
+                    {sortField === "studentName" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Score</th>
-                <th className="px-4 py-3">Percentage</th>
-                <th className="px-4 py-3">Violations</th>
-                <th className="px-4 py-3">Submitted At</th>
+                <th
+                  onClick={() => handleSort("score")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Score</span>
+                    {sortField === "score" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("percentage")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Percentage</span>
+                    {sortField === "percentage" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("violationCount")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Violations</span>
+                    {sortField === "violationCount" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("submittedAt")}
+                  className="px-4 py-3 cursor-pointer hover:text-indigo-600 select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Submitted At</span>
+                    {sortField === "submittedAt" && (
+                      <span className="text-[10px] text-indigo-600 font-bold">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-right">Details</th>
               </tr>
             </thead>

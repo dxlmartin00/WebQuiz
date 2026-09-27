@@ -27,10 +27,27 @@ export default function TeacherQuizzesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterSubject, setFilterSubject] = useState("ALL");
+  const [sortBy, setSortBy] = useState<"NEWEST" | "TITLE" | "COMPLETED" | "VIOLATIONS">("NEWEST");
 
   // Deletion modal
   const [quizToDelete, setQuizToDelete] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  function getTeacherDeadlineLabel(deadlineAt?: string | null) {
+    if (!deadlineAt) return null;
+    const now = new Date();
+    const d = new Date(deadlineAt);
+    const diffMs = d.getTime() - now.getTime();
+    if (diffMs <= 0) {
+      return { label: "Expired / Closed", isExpired: true };
+    }
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 0) {
+      return { label: `Closes in ${diffHours}h`, isExpired: false };
+    }
+    return { label: `Closes in ${diffDays}d`, isExpired: false };
+  }
 
   const fetchQuizzes = async () => {
     try {
@@ -77,14 +94,21 @@ export default function TeacherQuizzesPage() {
 
   const subjectCodes = Array.from(new Set(quizzes.map((q) => q.subjectCode)));
 
-  const filteredQuizzes = quizzes.filter((q) => {
-    const matchSearch =
-      q.title.toLowerCase().includes(search.toLowerCase()) ||
-      q.subjectCode.toLowerCase().includes(search.toLowerCase());
-    const matchSubject =
-      filterSubject === "ALL" || q.subjectCode === filterSubject;
-    return matchSearch && matchSubject;
-  });
+  const filteredQuizzes = quizzes
+    .filter((q) => {
+      const matchSearch =
+        q.title.toLowerCase().includes(search.toLowerCase()) ||
+        q.subjectCode.toLowerCase().includes(search.toLowerCase());
+      const matchSubject =
+        filterSubject === "ALL" || q.subjectCode === filterSubject;
+      return matchSearch && matchSubject;
+    })
+    .sort((a, b) => {
+      if (sortBy === "TITLE") return a.title.localeCompare(b.title);
+      if (sortBy === "COMPLETED") return (b.completedCount || 0) - (a.completedCount || 0);
+      if (sortBy === "VIOLATIONS") return (b.totalViolations || 0) - (a.totalViolations || 0);
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
 
   return (
     <div className="p-4 sm:p-8 space-y-6 max-w-7xl">
@@ -124,7 +148,7 @@ export default function TeacherQuizzesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterSubject}
             onChange={(e) => setFilterSubject(e.target.value)}
@@ -136,6 +160,18 @@ export default function TeacherQuizzesPage() {
                 {code}
               </option>
             ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e: any) => setSortBy(e.target.value)}
+            className="flat-input text-xs py-2 px-3"
+            title="Sort quizzes"
+          >
+            <option value="NEWEST">Newest First</option>
+            <option value="TITLE">Title A-Z</option>
+            <option value="COMPLETED">Most Submissions</option>
+            <option value="VIOLATIONS">Most Infractions</option>
           </select>
 
           <button
@@ -191,6 +227,21 @@ export default function TeacherQuizzesPage() {
                   ) : (
                     <span className="flat-badge-amber font-semibold">Draft</span>
                   )}
+                  {(() => {
+                    const dl = getTeacherDeadlineLabel(quiz.deadlineAt);
+                    if (!dl) return null;
+                    return (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 border ${
+                          dl.isExpired
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        {dl.label}
+                      </span>
+                    );
+                  })()}
                   <span className="text-xs text-slate-500 flex items-center gap-1">
                     <Clock className="w-3 h-3" /> {quiz.durationMinutes} mins
                   </span>
@@ -229,7 +280,15 @@ export default function TeacherQuizzesPage() {
                   <div className="text-xs font-bold text-slate-900">
                     {quiz.completedCount} / {quiz.enrolledCount} Completed
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
+                  <div className="w-24 sm:w-28 bg-slate-100 h-1.5 overflow-hidden mt-1 border border-slate-200 sm:ml-auto">
+                    <div
+                      className="bg-indigo-600 h-full transition-all"
+                      style={{
+                        width: `${quiz.enrolledCount > 0 ? Math.min(100, Math.round((quiz.completedCount / quiz.enrolledCount) * 100)) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">
                     {quiz.totalViolations > 0 ? (
                       <span className="text-rose-600 font-semibold flex items-center sm:justify-end gap-1">
                         <AlertTriangle className="w-3 h-3" /> {quiz.totalViolations} Flags

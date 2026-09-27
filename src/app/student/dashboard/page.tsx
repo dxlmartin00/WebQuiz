@@ -28,6 +28,34 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"ACTIVE" | "UPCOMING" | "COMPLETED">("ACTIVE");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  function getDeadlineStatus(deadlineAt?: string | null) {
+    if (!deadlineAt) return null;
+    const now = new Date();
+    const deadline = new Date(deadlineAt);
+    const diffMs = deadline.getTime() - now.getTime();
+    if (diffMs <= 0) {
+      return { label: "Deadline passed", isUrgent: true, isExpired: true };
+    }
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffHours < 3) {
+      const diffMins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+      return { label: `Closes in ${diffMins}m!`, isUrgent: true, isExpired: false };
+    }
+    if (diffHours < 24) {
+      return { label: `Closes in ${diffHours}h`, isUrgent: true, isExpired: false };
+    }
+    if (diffDays === 1) {
+      return { label: `Closes tomorrow`, isUrgent: false, isExpired: false };
+    }
+    return {
+      label: `Due ${deadline.toLocaleDateString([], { month: "short", day: "numeric" })}`,
+      isUrgent: false,
+      isExpired: false,
+    };
+  }
 
   const loadData = async () => {
     try {
@@ -58,9 +86,24 @@ export default function StudentDashboardPage() {
 
   const student = data?.student || { studentIdNumber: "", studentName: "" };
   const subjects = data?.enrolledSubjects || data?.subjects || [];
-  const activeQuizzes = data?.activeQuizzes || [];
-  const upcomingQuizzes = data?.upcomingQuizzes || [];
-  const completedQuizzes = data?.completedQuizzes || [];
+  const rawActiveQuizzes = data?.activeQuizzes || [];
+  const rawUpcomingQuizzes = data?.upcomingQuizzes || [];
+  const rawCompletedQuizzes = data?.completedQuizzes || [];
+
+  const filterItem = (q: any) => {
+    if (!searchQuery.trim()) return true;
+    const qTerm = searchQuery.toLowerCase();
+    return (
+      q.title?.toLowerCase().includes(qTerm) ||
+      q.subjectCode?.toLowerCase().includes(qTerm) ||
+      q.subjectTitle?.toLowerCase().includes(qTerm) ||
+      q.description?.toLowerCase().includes(qTerm)
+    );
+  };
+
+  const activeQuizzes = rawActiveQuizzes.filter(filterItem);
+  const upcomingQuizzes = rawUpcomingQuizzes.filter(filterItem);
+  const completedQuizzes = rawCompletedQuizzes.filter(filterItem);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -144,39 +187,55 @@ export default function StudentDashboardPage() {
           )}
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation and Search Bar */}
         <div className="space-y-4">
-          <div className="flex border-b border-slate-200 gap-6">
-            <button
-              onClick={() => setActiveTab("ACTIVE")}
-              className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-                activeTab === "ACTIVE"
-                  ? "border-indigo-600 text-indigo-600 font-black"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              Active Quizzes ({activeQuizzes.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("UPCOMING")}
-              className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-                activeTab === "UPCOMING"
-                  ? "border-indigo-600 text-indigo-600 font-black"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              Upcoming ({upcomingQuizzes.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("COMPLETED")}
-              className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-                activeTab === "COMPLETED"
-                  ? "border-indigo-600 text-indigo-600 font-black"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              Submission History ({completedQuizzes.length})
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200">
+            <div className="flex gap-6 overflow-x-auto pb-px">
+              <button
+                onClick={() => setActiveTab("ACTIVE")}
+                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  activeTab === "ACTIVE"
+                    ? "border-indigo-600 text-indigo-600 font-black"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                Active Quizzes ({activeQuizzes.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("UPCOMING")}
+                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  activeTab === "UPCOMING"
+                    ? "border-indigo-600 text-indigo-600 font-black"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                Upcoming ({upcomingQuizzes.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("COMPLETED")}
+                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  activeTab === "COMPLETED"
+                    ? "border-indigo-600 text-indigo-600 font-black"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                Submission History ({completedQuizzes.length})
+              </button>
+            </div>
+
+            {/* Quick Search Bar */}
+            <div className="pb-2 sm:pb-0">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Filter by title or course..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flat-input text-xs pl-8 py-1.5 w-full sm:w-56"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Tab Content with Skeletons */}
@@ -189,28 +248,48 @@ export default function StudentDashboardPage() {
             activeQuizzes.length === 0 ? (
               <div className="flat-card p-12 text-center bg-white border border-slate-200">
                 <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-                <h3 className="font-bold text-slate-900 text-sm">All caught up!</h3>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  {searchQuery ? "No matching quizzes found" : "All caught up!"}
+                </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  You have no pending quizzes or examinations at this time.
+                  {searchQuery
+                    ? "Try clearing your search term."
+                    : "You have no pending quizzes or examinations at this time."}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
-                {activeQuizzes.map((q: any) => (
-                  <div
-                    key={q.id}
-                    className="flat-card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-400 transition-colors shadow-xs"
-                  >
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CopyButton text={q.subjectCode} />
-                        <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> {q.durationMinutes} minutes
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {q.totalQuestions} Questions ({q.totalPoints} pts)
-                        </span>
-                      </div>
+                {activeQuizzes.map((q: any) => {
+                  const deadlineInfo = getDeadlineStatus(q.deadlineAt);
+
+                  return (
+                    <div
+                      key={q.id}
+                      className="flat-card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-400 transition-colors shadow-xs"
+                    >
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CopyButton text={q.subjectCode} />
+                          <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> {q.durationMinutes} minutes
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {q.totalQuestions} Questions ({q.totalPoints} pts)
+                          </span>
+
+                          {deadlineInfo && (
+                            <span
+                              className={`text-[11px] font-bold px-2 py-0.5 border flex items-center gap-1 ${
+                                deadlineInfo.isUrgent
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              <Clock className="w-3 h-3" />
+                              <span>{deadlineInfo.label}</span>
+                            </span>
+                          )}
+                        </div>
                       <h2 className="font-bold text-slate-900 text-base">
                         {q.title}
                       </h2>
@@ -229,7 +308,8 @@ export default function StudentDashboardPage() {
                       </Link>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             )
           ) : activeTab === "UPCOMING" ? (

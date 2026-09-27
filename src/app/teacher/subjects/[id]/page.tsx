@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   Search,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import ClassListImportModal from "@/components/teacher/ClassListImportModal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -198,6 +199,13 @@ export default function SubjectDetailPage({
     );
   });
 
+  const handleCopyAllIds = () => {
+    if (!enrollments.length) return;
+    const ids = enrollments.map((e: any) => e.studentIdNumber).join("\n");
+    navigator.clipboard.writeText(ids);
+    toast.success("Copied to Clipboard", `${enrollments.length} student IDs copied.`);
+  };
+
   return (
     <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-w-7xl">
       {/* Top Header */}
@@ -221,6 +229,17 @@ export default function SubjectDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyAllIds}
+            disabled={enrollments.length === 0}
+            className="flat-button-secondary text-xs py-2 px-3 flex items-center gap-1.5 font-semibold text-slate-700 disabled:opacity-50"
+            title="Copy all enrolled student IDs to clipboard"
+          >
+            <Copy className="w-3.5 h-3.5 text-slate-500" />
+            <span>Copy All IDs</span>
+          </button>
+
           <button
             onClick={() => setShowImportModal(true)}
             className="flat-button-primary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold"
