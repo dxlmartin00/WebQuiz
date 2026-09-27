@@ -4,21 +4,22 @@ import Link from "next/link";
 export interface LogoIconProps {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   className?: string;
-  variant?: "indigo" | "dark" | "light";
+  variant?: "auto" | "indigo" | "dark" | "light";
+  theme?: "dark" | "light";
 }
 
 /**
- * Geometric, emoji-free SVG Emblem for WebQuiz
- * Features:
- * - Sleek card frame with crisp border
- * - Assessment document guidelines
- * - Stylized "W" monogram in crisp solid white with checkmark peak
- * - Academic excellence spark / diamond at the peak
+ * WebQuiz Shield Mark Logo Icon
+ * - Authentic academic & integrity shield with verified checkmark
+ * - Auto-adapts to ANY background:
+ *   - On dark backdrops: Renders a vibrant Indigo shield with crisp highlight border and pure white checkmark
+ *   - On light backdrops: Renders the sleek deep slate shield with pure white checkmark
  */
 export function LogoIcon({
   size = "md",
   className = "",
-  variant = "indigo",
+  variant = "auto",
+  theme = "light",
 }: LogoIconProps) {
   const sizeMap = {
     xs: "w-5 h-5",
@@ -28,8 +29,11 @@ export function LogoIcon({
     xl: "w-12 h-12 sm:w-14 sm:h-14",
   };
 
+  const isDark =
+    variant === "dark" || (variant === "auto" && theme === "light");
+  const isIndigo =
+    variant === "indigo" || (variant === "auto" && theme === "dark");
   const isLight = variant === "light";
-  const isDark = variant === "dark";
 
   return (
     <svg
@@ -37,120 +41,39 @@ export function LogoIcon({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`${sizeMap[size]} ${className} shrink-0 select-none`}
-      aria-label="WebQuiz Logo"
+      aria-label="WebQuiz Shield Mark"
     >
-      <defs>
-        {/* Indigo Variant Gradient */}
-        <linearGradient
-          id="wq-indigo-bg"
-          x1="0"
-          y1="0"
-          x2="32"
-          y2="32"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#4F46E5" />
-          <stop offset="100%" stopColor="#312E81" />
-        </linearGradient>
-
-        {/* Dark Variant Gradient */}
-        <linearGradient
-          id="wq-dark-bg"
-          x1="0"
-          y1="0"
-          x2="32"
-          y2="32"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#1E293B" />
-          <stop offset="100%" stopColor="#0F172A" />
-        </linearGradient>
-
-        {/* Gold Diamond Gradient */}
-        <linearGradient
-          id="wq-spark-grad"
-          x1="24"
-          y1="5"
-          x2="28"
-          y2="11"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#FDE047" />
-          <stop offset="100%" stopColor="#F59E0B" />
-        </linearGradient>
-      </defs>
-
-      {/* Emblem Frame */}
+      {/* Shield Geometry */}
       {isLight ? (
-        <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
+        <path
+          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
           fill="#FFFFFF"
           stroke="#E2E8F0"
           strokeWidth="1.5"
         />
-      ) : isDark ? (
-        <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
-          fill="url(#wq-dark-bg)"
-          stroke="#334155"
-          strokeWidth="1.5"
+      ) : isIndigo ? (
+        <path
+          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
+          fill="#4F46E5"
+          stroke="#818CF8"
+          strokeWidth="1.2"
         />
       ) : (
-        <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
-          fill="url(#wq-indigo-bg)"
-          stroke="#6366F1"
-          strokeWidth="1.5"
+        <path
+          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
+          fill="#0F172A"
+          stroke="#334155"
+          strokeWidth="1"
         />
       )}
 
-      {/* Subtle Background Assessment Paper Guidelines */}
-      <line
-        x1="6.5"
-        y1="7.5"
-        x2="14"
-        y2="7.5"
-        stroke={isLight ? "#CBD5E1" : isDark ? "#475569" : "#818CF8"}
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeOpacity={isLight ? 0.8 : 0.4}
-      />
-      <line
-        x1="6.5"
-        y1="10.5"
-        x2="11.5"
-        y2="10.5"
-        stroke={isLight ? "#CBD5E1" : isDark ? "#475569" : "#818CF8"}
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeOpacity={isLight ? 0.8 : 0.4}
-      />
-
-      {/* Stylized "W" in full crisp white with checkmark peak */}
+      {/* Bold Verified Checkmark */}
       <path
-        d="M6.5 13.5L11 23L15.5 14L19.5 23L25.5 9.5"
-        stroke={isLight ? "#1E293B" : "#FFFFFF"}
-        strokeWidth="2.7"
+        d="M 11 16 L 14.5 19.5 L 21.5 12"
+        stroke={isLight ? "#4F46E5" : "#FFFFFF"}
+        strokeWidth="2.8"
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-
-      {/* Verification Sparkle / Academic Diamond */}
-      <path
-        d="M26 4.5L26.9 7.2L29.5 8L26.9 8.8L26 11.5L25.1 8.8L22.5 8L25.1 7.2L26 4.5Z"
-        fill="url(#wq-spark-grad)"
       />
     </svg>
   );
@@ -158,8 +81,8 @@ export function LogoIcon({
 
 export interface LogoProps {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
-  variant?: "indigo" | "dark" | "light";
-  theme?: "dark" | "light"; // Text color context (light text on dark background or vice versa)
+  variant?: "auto" | "indigo" | "dark" | "light";
+  theme?: "dark" | "light"; // Text color context
   showText?: boolean;
   subtitle?: string;
   badge?: React.ReactNode;
@@ -169,7 +92,7 @@ export interface LogoProps {
 
 export default function Logo({
   size = "md",
-  variant = "indigo",
+  variant = "auto",
   theme = "light",
   showText = true,
   subtitle,
@@ -181,7 +104,7 @@ export default function Logo({
 
   const content = (
     <div className={`flex items-center gap-2.5 min-w-0 ${className}`}>
-      <LogoIcon size={size} variant={variant} />
+      <LogoIcon size={size} variant={variant} theme={theme} />
 
       {showText && (
         <div className="flex flex-col min-w-0">
