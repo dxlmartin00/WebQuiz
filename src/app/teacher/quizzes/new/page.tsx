@@ -21,12 +21,72 @@ import {
   ChevronUp,
   ChevronDown,
   KeyRound,
+  RotateCcw,
+  History,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
 import { AnswerKeyModal } from "@/components/teacher/AnswerKeyModal";
 import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
+
+const DRAFT_STORAGE_KEY = "webquiz_teacher_quiz_draft_new";
+
+const DEFAULT_QUESTIONS: QuestionDraft[] = [
+  {
+    type: "MULTIPLE_CHOICE",
+    prompt: "Which protocol operates at the Transport Layer of the OSI Model?",
+    points: 2,
+    options: ["TCP", "HTTP", "IP", "DNS"],
+    correctAnswers: ["TCP"],
+    isCaseSensitive: false,
+    allowFuzzy: false,
+    fuzzyThreshold: 1,
+  },
+  {
+    type: "TRUE_FALSE",
+    prompt: "Relational databases use SQL as their standard query language.",
+    points: 1,
+    options: ["True", "False"],
+    correctAnswers: ["True"],
+    isCaseSensitive: false,
+    allowFuzzy: false,
+    fuzzyThreshold: 1,
+  },
+  {
+    type: "SHORT_ANSWER",
+    prompt: "What does CPU stand for?",
+    points: 2,
+    options: [],
+    correctAnswers: ["Central Processing Unit", "CPU"],
+    isCaseSensitive: false,
+    allowFuzzy: true,
+    fuzzyThreshold: 1,
+  },
+];
+
+function formatTimeAgo(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 15) return "just now";
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHrs = Math.floor(diffMin / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
 
 export default function NewQuizPage() {
   const router = useRouter();
@@ -35,6 +95,12 @@ export default function NewQuizPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Draft persistence state
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [showRestoredBanner, setShowRestoredBanner] = useState(false);
+  const [restoredTime, setRestoredTime] = useState<string | null>(null);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
   // Quiz Settings
   const [subjectId, setSubjectId] = useState("");
@@ -52,38 +118,7 @@ export default function NewQuizPage() {
   const [isAnswerKeyModalOpen, setIsAnswerKeyModalOpen] = useState(false);
 
   // Questions
-  const [questions, setQuestions] = useState<QuestionDraft[]>([
-    {
-      type: "MULTIPLE_CHOICE",
-      prompt: "Which protocol operates at the Transport Layer of the OSI Model?",
-      points: 2,
-      options: ["TCP", "HTTP", "IP", "DNS"],
-      correctAnswers: ["TCP"],
-      isCaseSensitive: false,
-      allowFuzzy: false,
-      fuzzyThreshold: 1,
-    },
-    {
-      type: "TRUE_FALSE",
-      prompt: "Relational databases use SQL as their standard query language.",
-      points: 1,
-      options: ["True", "False"],
-      correctAnswers: ["True"],
-      isCaseSensitive: false,
-      allowFuzzy: false,
-      fuzzyThreshold: 1,
-    },
-    {
-      type: "SHORT_ANSWER",
-      prompt: "What does CPU stand for?",
-      points: 2,
-      options: [],
-      correctAnswers: ["Central Processing Unit", "CPU"],
-      isCaseSensitive: false,
-      allowFuzzy: true,
-      fuzzyThreshold: 1,
-    },
-  ]);
+  const [questions, setQuestions] = useState<QuestionDraft[]>(DEFAULT_QUESTIONS);
 
   useEffect(() => {
     async function loadSubjects() {
@@ -91,18 +126,154 @@ export default function NewQuizPage() {
         const res = await fetch("/api/teacher/subjects");
         if (!res.ok) throw new Error("Failed to load subjects");
         const data = await res.json();
-        setSubjects(data.subjects || []);
-        if (data.subjects && data.subjects.length > 0) {
-          setSubjectId(data.subjects[0].id);
+        const loadedSubjects = data.subjects || [];
+        setSubjects(loadedSubjects);
+
+        // Check for saved draft in localStorage
+        const savedDraftRaw =
+          typeof window !== "undefined" ? localStorage.getItem(DRAFT_STORAGE_KEY) : null;
+
+        if (savedDraftRaw) {
+          try {
+            const draft = JSON.parse(savedDraftRaw);
+            if (draft && typeof draft === "object") {
+              if (draft.subjectId && loadedSubjects.some((s: any) => s.id === draft.subjectId)) {
+                setSubjectId(draft.subjectId);
+              } else if (loadedSubjects.length > 0) {
+                setSubjectId(loadedSubjects[0].id);
+              }
+              if (typeof draft.title === "string") setTitle(draft.title);
+              if (typeof draft.description === "string") setDescription(draft.description);
+              if (typeof draft.durationMinutes === "number") setDurationMinutes(draft.durationMinutes);
+              if (draft.timerMode === "WHOLE_QUIZ" || draft.timerMode === "PER_ITEM") {
+                setTimerMode(draft.timerMode);
+              }
+              if (typeof draft.timePerItemSeconds === "number") setTimePerItemSeconds(draft.timePerItemSeconds);
+              if (typeof draft.maxViolations === "number") setMaxViolations(draft.maxViolations);
+              if (typeof draft.deadlineAt === "string") setDeadlineAt(draft.deadlineAt);
+              if (typeof draft.isPublished === "boolean") setIsPublished(draft.isPublished);
+              if (typeof draft.shuffleQuestions === "boolean") setShuffleQuestions(draft.shuffleQuestions);
+              if (typeof draft.shuffleChoices === "boolean") setShuffleChoices(draft.shuffleChoices);
+              if (Array.isArray(draft.questions) && draft.questions.length > 0) {
+                setQuestions(draft.questions);
+              }
+              if (draft.savedAt) {
+                setRestoredTime(draft.savedAt);
+                setLastSavedTime(draft.savedAt);
+
+                const hasMeaningfulContent =
+                  (draft.title && draft.title.trim().length > 0) ||
+                  (draft.description && draft.description.trim().length > 0) ||
+                  (Array.isArray(draft.questions) && draft.questions.length !== 3);
+
+                if (hasMeaningfulContent) {
+                  setShowRestoredBanner(true);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to parse saved quiz draft:", err);
+          }
+        } else if (loadedSubjects.length > 0) {
+          setSubjectId(loadedSubjects[0].id);
         }
       } catch (e: any) {
         setError(e.message);
       } finally {
         setLoading(false);
+        setIsInitialLoadComplete(true);
       }
     }
     loadSubjects();
   }, []);
+
+  // Auto-save draft whenever quiz builder state changes
+  useEffect(() => {
+    if (!isInitialLoadComplete) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const draft = {
+          subjectId,
+          title,
+          description,
+          durationMinutes,
+          timerMode,
+          timePerItemSeconds,
+          maxViolations,
+          deadlineAt,
+          isPublished,
+          shuffleQuestions,
+          shuffleChoices,
+          questions,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+        setLastSavedTime(draft.savedAt);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [
+    isInitialLoadComplete,
+    subjectId,
+    title,
+    description,
+    durationMinutes,
+    timerMode,
+    timePerItemSeconds,
+    maxViolations,
+    deadlineAt,
+    isPublished,
+    shuffleQuestions,
+    shuffleChoices,
+    questions,
+  ]);
+
+  // Warn on tab closing if there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const hasContent =
+        title.trim().length > 0 ||
+        questions.length !== 3 ||
+        description.trim().length > 0;
+      if (hasContent && !submitting) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [title, questions, description, submitting]);
+
+  const handleDiscardDraft = () => {
+    if (!window.confirm("Are you sure you want to discard this draft? Your quiz builder progress will be reset.")) {
+      return;
+    }
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {}
+
+    setShowRestoredBanner(false);
+    setRestoredTime(null);
+    setLastSavedTime(null);
+    setTitle("");
+    setDescription("");
+    setDurationMinutes(20);
+    setTimerMode("WHOLE_QUIZ");
+    setTimePerItemSeconds(60);
+    setMaxViolations(3);
+    setDeadlineAt("");
+    setIsPublished(true);
+    setShuffleQuestions(false);
+    setShuffleChoices(false);
+    setQuestions(DEFAULT_QUESTIONS);
+    if (subjects.length > 0) {
+      setSubjectId(subjects[0].id);
+    }
+  };
 
   const addQuestion = (type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "INSTRUCTION") => {
     if (type === "INSTRUCTION") {
@@ -229,6 +400,11 @@ export default function NewQuizPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create quiz");
 
+      // Clear draft upon successful creation
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {}
+
       router.push("/teacher/quizzes");
       router.refresh();
     } catch (e: any) {
@@ -267,7 +443,17 @@ export default function NewQuizPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {lastSavedTime && (
+              <div
+                className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-100 px-2.5 py-1 border border-slate-200"
+                title={`Last auto-saved: ${new Date(lastSavedTime).toLocaleTimeString()}`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Auto-saved {formatTimeAgo(lastSavedTime)}</span>
+              </div>
+            )}
+
             <div className="text-right pr-3 border-r border-slate-200">
               <div className="text-xs font-bold text-slate-900">
                 {gradableQuestionsCount} Questions
@@ -310,6 +496,40 @@ export default function NewQuizPage() {
           </div>
         </div>
       </div>
+
+      {/* Restored Draft Alert Banner */}
+      {showRestoredBanner && (
+        <div className="p-4 bg-indigo-50 border-2 border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <History className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-bold text-xs sm:text-sm">
+                Unsaved quiz draft restored
+              </p>
+              <p className="text-[11px] sm:text-xs text-indigo-800">
+                Your previous quiz builder progress was automatically recovered{restoredTime ? ` (saved ${formatTimeAgo(restoredTime)})` : ""}.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="flat-button-secondary text-xs py-1.5 px-3 bg-white text-rose-700 border-rose-300 hover:bg-rose-50 hover:border-rose-400 font-bold flex items-center gap-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Discard Draft</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRestoredBanner(false)}
+              className="flat-button-primary text-xs py-1.5 px-3 font-bold"
+            >
+              Keep Working
+            </button>
+          </div>
+        </div>
+      )}
 
       {successToast && (
         <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs animate-in slide-in-from-top-2">
@@ -953,15 +1173,26 @@ export default function NewQuizPage() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSaveQuiz}
-          disabled={submitting}
-          className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          <span>{submitting ? "Saving..." : "Publish Quiz & Rules"}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDiscardDraft}
+            className="flat-button-secondary text-xs py-2 px-3 text-slate-500 hover:text-rose-600 hover:border-rose-300 font-medium transition-colors"
+            title="Clear all unsaved progress and start over"
+          >
+            Clear Draft
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSaveQuiz}
+            disabled={submitting}
+            className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            <span>{submitting ? "Saving..." : "Publish Quiz & Rules"}</span>
+          </button>
+        </div>
       </div>
       </div>
 

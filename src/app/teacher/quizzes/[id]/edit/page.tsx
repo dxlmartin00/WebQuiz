@@ -18,12 +18,39 @@ import {
   ChevronDown,
   KeyRound,
   CheckCircle2,
+  RotateCcw,
+  History,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
 import { AnswerKeyModal } from "@/components/teacher/AnswerKeyModal";
 import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
+
+const DRAFT_STORAGE_KEY_PREFIX = "webquiz_teacher_quiz_draft_edit_";
+
+function formatTimeAgo(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 15) return "just now";
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHrs = Math.floor(diffMin / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
 
 function formatForDatetimeLocal(isoOrDateString?: string | null): string {
   if (!isoOrDateString) return "";
@@ -50,6 +77,13 @@ export default function EditQuizPage({
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
+  // Draft persistence state
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [showRestoredBanner, setShowRestoredBanner] = useState(false);
+  const [restoredTime, setRestoredTime] = useState<string | null>(null);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [serverQuizState, setServerQuizState] = useState<any>(null);
+
   // Quiz Settings
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -74,18 +108,18 @@ export default function EditQuizPage({
         const data = await res.json();
         const q = data.quiz;
 
-        setTitle(q.title);
-        setDescription(q.description || "");
-        setDurationMinutes(q.durationMinutes);
-        setTimerMode(q.timerMode || "WHOLE_QUIZ");
-        setTimePerItemSeconds(q.timePerItemSeconds || 60);
-        setMaxViolations(q.maxViolations);
-        setDeadlineAt(formatForDatetimeLocal(q.deadlineAt));
-        setIsPublished(q.isPublished);
-        setShuffleQuestions(q.shuffleQuestions);
-        setShuffleChoices(q.shuffleChoices);
-        setQuestions(
-          q.questions.map((item: any) => ({
+        const serverSnapshot = {
+          title: q.title,
+          description: q.description || "",
+          durationMinutes: q.durationMinutes,
+          timerMode: q.timerMode || "WHOLE_QUIZ",
+          timePerItemSeconds: q.timePerItemSeconds || 60,
+          maxViolations: q.maxViolations,
+          deadlineAt: formatForDatetimeLocal(q.deadlineAt),
+          isPublished: q.isPublished,
+          shuffleQuestions: q.shuffleQuestions,
+          shuffleChoices: q.shuffleChoices,
+          questions: q.questions.map((item: any) => ({
             type: item.type,
             prompt: item.prompt,
             points: item.points,
@@ -94,16 +128,146 @@ export default function EditQuizPage({
             isCaseSensitive: item.isCaseSensitive,
             allowFuzzy: item.allowFuzzy,
             fuzzyThreshold: item.fuzzyThreshold,
-          }))
-        );
+          })),
+        };
+        setServerQuizState(serverSnapshot);
+
+        // Check for local unsaved draft
+        const draftKey = `${DRAFT_STORAGE_KEY_PREFIX}${id}`;
+        const savedDraftRaw =
+          typeof window !== "undefined" ? localStorage.getItem(draftKey) : null;
+
+        if (savedDraftRaw) {
+          try {
+            const draft = JSON.parse(savedDraftRaw);
+            if (draft && typeof draft === "object") {
+              setTitle(draft.title ?? serverSnapshot.title);
+              setDescription(draft.description ?? serverSnapshot.description);
+              setDurationMinutes(draft.durationMinutes ?? serverSnapshot.durationMinutes);
+              setTimerMode(draft.timerMode ?? serverSnapshot.timerMode);
+              setTimePerItemSeconds(draft.timePerItemSeconds ?? serverSnapshot.timePerItemSeconds);
+              setMaxViolations(draft.maxViolations ?? serverSnapshot.maxViolations);
+              setDeadlineAt(draft.deadlineAt ?? serverSnapshot.deadlineAt);
+              setIsPublished(draft.isPublished ?? serverSnapshot.isPublished);
+              setShuffleQuestions(draft.shuffleQuestions ?? serverSnapshot.shuffleQuestions);
+              setShuffleChoices(draft.shuffleChoices ?? serverSnapshot.shuffleChoices);
+              setQuestions(draft.questions ?? serverSnapshot.questions);
+
+              if (draft.savedAt) {
+                setRestoredTime(draft.savedAt);
+                setLastSavedTime(draft.savedAt);
+                setShowRestoredBanner(true);
+              }
+            }
+          } catch (err) {
+            console.error("Failed to parse edit quiz draft:", err);
+          }
+        } else {
+          setTitle(serverSnapshot.title);
+          setDescription(serverSnapshot.description);
+          setDurationMinutes(serverSnapshot.durationMinutes);
+          setTimerMode(serverSnapshot.timerMode);
+          setTimePerItemSeconds(serverSnapshot.timePerItemSeconds);
+          setMaxViolations(serverSnapshot.maxViolations);
+          setDeadlineAt(serverSnapshot.deadlineAt);
+          setIsPublished(serverSnapshot.isPublished);
+          setShuffleQuestions(serverSnapshot.shuffleQuestions);
+          setShuffleChoices(serverSnapshot.shuffleChoices);
+          setQuestions(serverSnapshot.questions);
+        }
       } catch (e: any) {
         setError(e.message);
       } finally {
         setLoading(false);
+        setIsInitialLoadComplete(true);
       }
     }
     loadQuiz();
   }, [id]);
+
+  // Auto-save draft when changes are made
+  useEffect(() => {
+    if (!isInitialLoadComplete) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const draftKey = `${DRAFT_STORAGE_KEY_PREFIX}${id}`;
+        const draft = {
+          title,
+          description,
+          durationMinutes,
+          timerMode,
+          timePerItemSeconds,
+          maxViolations,
+          deadlineAt,
+          isPublished,
+          shuffleQuestions,
+          shuffleChoices,
+          questions,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+        setLastSavedTime(draft.savedAt);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [
+    id,
+    isInitialLoadComplete,
+    title,
+    description,
+    durationMinutes,
+    timerMode,
+    timePerItemSeconds,
+    maxViolations,
+    deadlineAt,
+    isPublished,
+    shuffleQuestions,
+    shuffleChoices,
+    questions,
+  ]);
+
+  // Warn on tab closing if there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (lastSavedTime && !submitting) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [lastSavedTime, submitting]);
+
+  const handleDiscardDraft = () => {
+    if (!window.confirm("Are you sure you want to discard your unsaved edits? The quiz will revert to its last saved state.")) {
+      return;
+    }
+    try {
+      localStorage.removeItem(`${DRAFT_STORAGE_KEY_PREFIX}${id}`);
+    } catch {}
+
+    setShowRestoredBanner(false);
+    setRestoredTime(null);
+    setLastSavedTime(null);
+
+    if (serverQuizState) {
+      setTitle(serverQuizState.title);
+      setDescription(serverQuizState.description);
+      setDurationMinutes(serverQuizState.durationMinutes);
+      setTimerMode(serverQuizState.timerMode);
+      setTimePerItemSeconds(serverQuizState.timePerItemSeconds);
+      setMaxViolations(serverQuizState.maxViolations);
+      setDeadlineAt(serverQuizState.deadlineAt);
+      setIsPublished(serverQuizState.isPublished);
+      setShuffleQuestions(serverQuizState.shuffleQuestions);
+      setShuffleChoices(serverQuizState.shuffleChoices);
+      setQuestions(serverQuizState.questions);
+    }
+  };
 
   const addQuestion = (type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "INSTRUCTION") => {
     if (type === "INSTRUCTION") {
@@ -225,6 +389,11 @@ export default function EditQuizPage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update quiz");
 
+      // Clear draft upon successful update
+      try {
+        localStorage.removeItem(`${DRAFT_STORAGE_KEY_PREFIX}${id}`);
+      } catch {}
+
       router.push(`/teacher/quizzes/${id}/gradebook`);
       router.refresh();
     } catch (e: any) {
@@ -271,7 +440,17 @@ export default function EditQuizPage({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {lastSavedTime && (
+              <div
+                className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-100 px-2.5 py-1 border border-slate-200"
+                title={`Last auto-saved: ${new Date(lastSavedTime).toLocaleTimeString()}`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Auto-saved {formatTimeAgo(lastSavedTime)}</span>
+              </div>
+            )}
+
             <div className="text-right pr-3 border-r border-slate-200">
               <div className="text-xs font-bold text-slate-900">
                 {gradableQuestionsCount} Questions
@@ -314,6 +493,40 @@ export default function EditQuizPage({
           </div>
         </div>
       </div>
+
+      {/* Restored Draft Alert Banner */}
+      {showRestoredBanner && (
+        <div className="p-4 bg-indigo-50 border-2 border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <History className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-bold text-xs sm:text-sm">
+                Unsaved quiz edits restored
+              </p>
+              <p className="text-[11px] sm:text-xs text-indigo-800">
+                Your previous unsaved changes were automatically recovered{restoredTime ? ` (saved ${formatTimeAgo(restoredTime)})` : ""}.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="flat-button-secondary text-xs py-1.5 px-3 bg-white text-rose-700 border-rose-300 hover:bg-rose-50 hover:border-rose-400 font-bold flex items-center gap-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Discard Edits</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRestoredBanner(false)}
+              className="flat-button-primary text-xs py-1.5 px-3 font-bold"
+            >
+              Keep Working
+            </button>
+          </div>
+        </div>
+      )}
 
       {successToast && (
         <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs animate-in slide-in-from-top-2">
@@ -931,15 +1144,26 @@ export default function EditQuizPage({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleUpdateQuiz}
-          disabled={submitting}
-          className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          <span>{submitting ? "Saving..." : "Save Changes"}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDiscardDraft}
+            className="flat-button-secondary text-xs py-2 px-3 text-slate-500 hover:text-rose-600 hover:border-rose-300 font-medium transition-colors"
+            title="Discard unsaved changes and revert to the saved version"
+          >
+            Discard Edits
+          </button>
+
+          <button
+            type="button"
+            onClick={handleUpdateQuiz}
+            disabled={submitting}
+            className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            <span>{submitting ? "Saving..." : "Save Changes"}</span>
+          </button>
+        </div>
       </div>
       </div>
 
