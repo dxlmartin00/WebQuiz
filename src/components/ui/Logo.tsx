@@ -8,12 +8,11 @@ export interface LogoIconProps {
 }
 
 /**
- * Geometric, emoji-free SVG Emblem for WebQuiz
- * Features:
- * - Flat academic card frame with crisp border
- * - Assessment document guidelines
- * - Stylized "W" monogram where the right wing transforms into an upward verified checkmark
- * - Academic excellence spark / diamond at the peak
+ * Universal High-Contrast WebQuiz Emblem
+ * - Self-contained high-luminance tile that fits with high contrast on ANY background (dark, light, gray, or black)
+ * - Single-path solid-white geometric "W" that is 100% visible and never disappears or appears as a "V"
+ * - Dynamic checkmark sweep with radiant golden achievement diamond at the crest
+ * - Zero fragile gradient IDs to ensure flawless rendering across all browsers and SSR environments
  */
 export function LogoIcon({
   size = "md",
@@ -39,141 +38,60 @@ export function LogoIcon({
       className={`${sizeMap[size]} ${className} shrink-0 select-none`}
       aria-label="WebQuiz Logo"
     >
-      <defs>
-        {/* Indigo Variant Gradient */}
-        <linearGradient
-          id="wq-indigo-bg"
-          x1="0"
-          y1="0"
-          x2="32"
-          y2="32"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#4F46E5" />
-          <stop offset="100%" stopColor="#312E81" />
-        </linearGradient>
-
-        {/* Dark Variant Gradient */}
-        <linearGradient
-          id="wq-dark-bg"
-          x1="0"
-          y1="0"
-          x2="32"
-          y2="32"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#1E293B" />
-          <stop offset="100%" stopColor="#0F172A" />
-        </linearGradient>
-
-        {/* Dynamic Verification Wing Gradient */}
-        <linearGradient
-          id="wq-accent-grad"
-          x1="14"
-          y1="23"
-          x2="26"
-          y2="9"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#38BDF8" />
-          <stop offset="100%" stopColor="#818CF8" />
-        </linearGradient>
-
-        {/* Gold Diamond Gradient */}
-        <linearGradient
-          id="wq-spark-grad"
-          x1="24"
-          y1="5"
-          x2="28"
-          y2="11"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0%" stopColor="#FDE047" />
-          <stop offset="100%" stopColor="#F59E0B" />
-        </linearGradient>
-      </defs>
-
-      {/* Emblem Frame */}
+      {/* Outer Brand Tile - High-contrast on both dark and light backdrops */}
       {isLight ? (
         <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
+          width="32"
+          height="32"
+          rx="7"
           fill="#FFFFFF"
           stroke="#E2E8F0"
           strokeWidth="1.5"
         />
       ) : isDark ? (
         <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
-          fill="url(#wq-dark-bg)"
+          width="32"
+          height="32"
+          rx="7"
+          fill="#0F172A"
           stroke="#334155"
           strokeWidth="1.5"
         />
       ) : (
         <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="5"
-          fill="url(#wq-indigo-bg)"
+          width="32"
+          height="32"
+          rx="7"
+          fill="#4F46E5"
           stroke="#6366F1"
           strokeWidth="1.5"
         />
       )}
 
-      {/* Subtle Background Assessment Paper Guidelines */}
-      <line
-        x1="6.5"
-        y1="7.5"
-        x2="14"
-        y2="7.5"
-        stroke={isLight ? "#CBD5E1" : isDark ? "#475569" : "#818CF8"}
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeOpacity={isLight ? 0.8 : 0.4}
-      />
-      <line
-        x1="6.5"
-        y1="10.5"
-        x2="11.5"
-        y2="10.5"
-        stroke={isLight ? "#CBD5E1" : isDark ? "#475569" : "#818CF8"}
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeOpacity={isLight ? 0.8 : 0.4}
+      {/* Subtle Academic Assessment Paper Clip / Grid Notch */}
+      <rect
+        x="13.5"
+        y="2"
+        width="5"
+        height="2"
+        rx="1"
+        fill={isLight ? "#CBD5E1" : isDark ? "#334155" : "#818CF8"}
+        fillOpacity="0.8"
       />
 
-      {/* Geometric "W" monogram with verified checkmark wing */}
-      {/* Left stroke of W */}
+      {/* Unified Bold Geometric "W" Monogram with Checkmark Finish */}
       <path
-        d="M6.5 13.5L11 23L15.5 14"
-        stroke={isLight ? "#1E293B" : "#FFFFFF"}
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {/* Right stroke of W transforming into a checkmark accent */}
-      <path
-        d="M14.5 14L19 23L25.5 9.5"
-        stroke={isLight ? "#4F46E5" : "url(#wq-accent-grad)"}
+        d="M 6 11 L 11 23 L 16 13.5 L 21 23 L 26.5 9.5"
+        stroke={isLight ? "#4F46E5" : "#FFFFFF"}
         strokeWidth="2.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
 
-      {/* Verification Sparkle / Academic Diamond */}
-      <path
-        d="M26 4.5L26.9 7.2L29.5 8L26.9 8.8L26 11.5L25.1 8.8L22.5 8L25.1 7.2L26 4.5Z"
-        fill="url(#wq-spark-grad)"
+      {/* Radiant Golden Achievement Star / Academic Diamond */}
+      <polygon
+        points="26.5,3.5 27.5,5.5 29.5,6.5 27.5,7.5 26.5,9.5 25.5,7.5 23.5,6.5 25.5,5.5"
+        fill="#FBBF24"
       />
     </svg>
   );
