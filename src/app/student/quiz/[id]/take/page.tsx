@@ -581,7 +581,6 @@ export default function ActiveExamRoomPage({
           <div className="max-w-4xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
             <Logo
               size="sm"
-              variant="indigo"
               theme="light"
               subtitle="Exam Submission"
               href="/student/dashboard"

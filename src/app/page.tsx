@@ -58,7 +58,6 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
           <Logo
             size="md"
-            variant="indigo"
             theme="light"
             badge={
               <span className="text-[10px] sm:text-xs font-mono uppercase bg-slate-100 text-slate-600 px-1.5 py-0.5 border border-slate-200">
@@ -143,7 +142,7 @@ export default function LandingPage() {
         <div className="lg:col-span-5 w-full">
           <div className="flat-card p-5 sm:p-7 bg-white border-2 border-slate-900 shadow-xl space-y-4 sm:space-y-5">
             <div className="flex items-start gap-3.5">
-              <LogoIcon size="md" variant="indigo" />
+              <LogoIcon size="md" theme="light" />
               <div>
                 <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono">
                   <UserCheck className="w-3.5 h-3.5" />

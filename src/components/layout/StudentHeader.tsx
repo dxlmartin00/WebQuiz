@@ -32,7 +32,6 @@ export default function StudentHeader({
         {/* Brand */}
         <Logo
           size="md"
-          variant="indigo"
           theme="light"
           subtitle="Student Portal"
           href="/student/dashboard"

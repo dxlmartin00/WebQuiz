@@ -4,22 +4,22 @@ import Link from "next/link";
 export interface LogoIconProps {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   className?: string;
-  variant?: "auto" | "indigo" | "dark" | "light";
-  theme?: "dark" | "light";
+  theme?: "dark" | "light"; // Text and container context
+  variant?: "auto" | "dark" | "indigo" | "light";
 }
 
 /**
  * WebQuiz Shield Mark Logo Icon
  * - Authentic academic & integrity shield with verified checkmark
- * - Auto-adapts to ANY background:
- *   - On dark backdrops: Renders a vibrant Indigo shield with crisp highlight border and pure white checkmark
- *   - On light backdrops: Renders the sleek deep slate shield with pure white checkmark
+ * - Perfectly calibrated geometry with optical-center checkmark alignment
+ * - On light backgrounds: Deep dark slate shield (#0F172A) with solid white checkmark
+ * - On dark backgrounds: Royal Indigo shield (#4F46E5) with highlight stroke and solid white checkmark
  */
 export function LogoIcon({
   size = "md",
   className = "",
-  variant = "auto",
   theme = "light",
+  variant = "auto",
 }: LogoIconProps) {
   const sizeMap = {
     xs: "w-5 h-5",
@@ -29,11 +29,10 @@ export function LogoIcon({
     xl: "w-12 h-12 sm:w-14 sm:h-14",
   };
 
-  const isDark =
-    variant === "dark" || (variant === "auto" && theme === "light");
-  const isIndigo =
-    variant === "indigo" || (variant === "auto" && theme === "dark");
-  const isLight = variant === "light";
+  const isDarkBg = theme === "dark";
+  const useIndigo =
+    variant === "indigo" || (variant === "auto" && isDarkBg);
+  const useWhite = variant === "light";
 
   return (
     <svg
@@ -43,35 +42,35 @@ export function LogoIcon({
       className={`${sizeMap[size]} ${className} shrink-0 select-none`}
       aria-label="WebQuiz Shield Mark"
     >
-      {/* Shield Geometry */}
-      {isLight ? (
+      {/* Symmetrical Academic Shield */}
+      {useWhite ? (
         <path
-          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
+          d="M 16 3 L 27 6.5 V 15 C 27 22.5 21 27.5 16 29.5 C 11 27.5 5 22.5 5 15 V 6.5 Z"
           fill="#FFFFFF"
           stroke="#E2E8F0"
           strokeWidth="1.5"
         />
-      ) : isIndigo ? (
+      ) : useIndigo ? (
         <path
-          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
+          d="M 16 3 L 27 6.5 V 15 C 27 22.5 21 27.5 16 29.5 C 11 27.5 5 22.5 5 15 V 6.5 Z"
           fill="#4F46E5"
           stroke="#818CF8"
           strokeWidth="1.2"
         />
       ) : (
         <path
-          d="M 16 3 L 26.5 6.5 C 26.5 17 19.5 24.5 16 28.5 C 12.5 24.5 5.5 17 5.5 6.5 Z"
+          d="M 16 3 L 27 6.5 V 15 C 27 22.5 21 27.5 16 29.5 C 11 27.5 5 22.5 5 15 V 6.5 Z"
           fill="#0F172A"
-          stroke="#334155"
+          stroke="#1E293B"
           strokeWidth="1"
         />
       )}
 
-      {/* Bold Verified Checkmark */}
+      {/* Perfectly Centered Verified Checkmark */}
       <path
-        d="M 11 16 L 14.5 19.5 L 21.5 12"
-        stroke={isLight ? "#4F46E5" : "#FFFFFF"}
-        strokeWidth="2.8"
+        d="M 9.5 15 L 14 19.5 L 22.5 10.5"
+        stroke={useWhite ? "#4F46E5" : "#FFFFFF"}
+        strokeWidth="3.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -81,8 +80,8 @@ export function LogoIcon({
 
 export interface LogoProps {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
-  variant?: "auto" | "indigo" | "dark" | "light";
-  theme?: "dark" | "light"; // Text color context
+  variant?: "auto" | "dark" | "indigo" | "light";
+  theme?: "dark" | "light"; // Text and container context
   showText?: boolean;
   subtitle?: string;
   badge?: React.ReactNode;

@@ -51,7 +51,7 @@ function TeacherLoginForm() {
   return (
     <div className="flat-card border-2 border-slate-900 bg-white p-6 sm:p-8 space-y-6">
       <div className="text-center pb-5 border-b border-slate-200">
-        <LogoIcon size="xl" variant="indigo" className="mx-auto mb-3" />
+        <LogoIcon size="xl" theme="light" className="mx-auto mb-3" />
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">
           Faculty Portal Sign In
         </h1>
@@ -116,7 +116,7 @@ export default function TeacherLoginPage() {
       {/* Navigation */}
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Logo size="md" variant="indigo" theme="light" href="/" />
+          <Logo size="md" theme="light" href="/" />
 
           <Link
             href="/"
