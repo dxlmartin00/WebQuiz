@@ -5,6 +5,9 @@ import Providers from "@/components/providers/SessionProvider";
 export const metadata: Metadata = {
   title: "WebQuiz - Modern Quiz & Exam Management Platform",
   description: "Secure, responsive, and authoritative quiz management system with automated grading and integrity monitoring.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

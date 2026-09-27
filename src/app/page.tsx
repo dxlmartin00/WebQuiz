@@ -14,6 +14,7 @@ import {
   BookOpen,
   CheckCircle2,
 } from "lucide-react";
+import Logo, { LogoIcon } from "@/components/ui/Logo";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -55,17 +56,16 @@ export default function LandingPage() {
       {/* Top Navigation */}
       <header className="border-b border-slate-200 bg-white sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700">
-              W
-            </div>
-            <span className="font-black text-slate-900 tracking-tight text-base sm:text-lg">
-              WebQuiz
-            </span>
-            <span className="text-[10px] sm:text-xs font-mono uppercase bg-slate-100 text-slate-600 px-1.5 py-0.5 border border-slate-200">
-              Academic v1.0
-            </span>
-          </div>
+          <Logo
+            size="md"
+            variant="indigo"
+            theme="light"
+            badge={
+              <span className="text-[10px] sm:text-xs font-mono uppercase bg-slate-100 text-slate-600 px-1.5 py-0.5 border border-slate-200">
+                Academic v1.0
+              </span>
+            }
+          />
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
@@ -142,17 +142,20 @@ export default function LandingPage() {
         {/* Right Col: Student Portal Quick Access Card */}
         <div className="lg:col-span-5 w-full">
           <div className="flat-card p-5 sm:p-7 bg-white border-2 border-slate-900 shadow-xl space-y-4 sm:space-y-5">
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono mb-1">
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Student Portal</span>
+            <div className="flex items-start gap-3.5">
+              <LogoIcon size="md" variant="indigo" />
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Student Portal</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                  Enter Exam Room
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Enter your enrolled student ID number to view and start your quizzes.
+                </p>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Enter Exam Room
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Enter your enrolled student ID number to view and start your quizzes.
-              </p>
             </div>
 
             {error && (

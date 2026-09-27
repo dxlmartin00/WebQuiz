@@ -5,6 +5,7 @@ import { signIn, useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { GraduationCap, AlertCircle, ShieldCheck } from "lucide-react";
+import Logo, { LogoIcon } from "@/components/ui/Logo";
 
 function TeacherLoginForm() {
   const router = useRouter();
@@ -50,9 +51,7 @@ function TeacherLoginForm() {
   return (
     <div className="flat-card border-2 border-slate-900 bg-white p-6 sm:p-8 space-y-6">
       <div className="text-center pb-5 border-b border-slate-200">
-        <div className="w-12 h-12 bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-          <GraduationCap className="w-6 h-6" />
-        </div>
+        <LogoIcon size="xl" variant="indigo" className="mx-auto mb-3" />
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">
           Faculty Portal Sign In
         </h1>
@@ -117,14 +116,7 @@ export default function TeacherLoginPage() {
       {/* Navigation */}
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700">
-              W
-            </div>
-            <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">
-              WebQuiz
-            </span>
-          </Link>
+          <Logo size="md" variant="indigo" theme="light" href="/" />
 
           <Link
             href="/"

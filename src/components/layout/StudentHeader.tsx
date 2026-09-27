@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, User, GraduationCap } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 
 interface StudentHeaderProps {
   studentName?: string;
@@ -29,19 +30,13 @@ export default function StudentHeader({
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
         {/* Brand */}
-        <Link href="/student/dashboard" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700 shrink-0">
-            W
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-bold text-slate-900 tracking-tight text-sm sm:text-base leading-tight truncate">
-              WebQuiz
-            </span>
-            <span className="text-[9px] sm:text-[10px] uppercase font-semibold text-indigo-600 tracking-wider">
-              Student Portal
-            </span>
-          </div>
-        </Link>
+        <Logo
+          size="md"
+          variant="indigo"
+          theme="light"
+          subtitle="Student Portal"
+          href="/student/dashboard"
+        />
 
         {/* User Info & Actions */}
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">

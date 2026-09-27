@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Clock, ShieldAlert, LogOut, RefreshCw, CheckCircle2 } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 
 export default function PendingApprovalPage() {
   const { data: session, update } = useSession();
@@ -96,14 +97,7 @@ export default function PendingApprovalPage() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 text-white flex items-center justify-center font-bold text-sm sm:text-base border border-slate-700">
-              W
-            </div>
-            <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">
-              WebQuiz
-            </span>
-          </Link>
+          <Logo size="md" variant="indigo" theme="light" href="/" />
 
           <button
             onClick={() => signOut({ callbackUrl: "/teacher/login" })}

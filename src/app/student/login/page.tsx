@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, UserCheck, ArrowRight, ShieldCheck } from "lucide-react";
+import Logo, { LogoIcon } from "@/components/ui/Logo";
 
 export default function StudentLoginPage() {
   const router = useRouter();
@@ -52,29 +53,27 @@ export default function StudentLoginPage() {
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Home</span>
           </Link>
-          <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-            <span className="w-5 h-5 bg-slate-900 text-white flex items-center justify-center font-mono text-[10px]">
-              W
-            </span>
-            <span>WebQuiz Student Portal</span>
-          </div>
+          <Logo size="sm" variant="indigo" theme="light" subtitle="Student Portal" href="/" />
         </div>
       </header>
 
       {/* Main card */}
       <div className="w-full max-w-md mx-auto p-4 sm:p-6 my-auto">
         <div className="flat-card p-6 sm:p-8 bg-white border-2 border-slate-900 shadow-xl space-y-5">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono">
-              <UserCheck className="w-4 h-4" />
-              <span>Assessment Access</span>
+          <div className="flex items-start gap-3.5">
+            <LogoIcon size="lg" variant="indigo" />
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 uppercase tracking-wider font-mono">
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Assessment Access</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                Student Sign In
+              </h1>
+              <p className="text-xs text-slate-500">
+                Enter your official enrolled Student ID to access your active examinations.
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Student Sign In
-            </h1>
-            <p className="text-xs text-slate-500">
-              Enter your official enrolled Student ID to access your active examinations.
-            </p>
           </div>
 
           {error && (

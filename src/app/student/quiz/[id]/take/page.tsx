@@ -24,6 +24,7 @@ import {
   Flag,
   Check,
 } from "lucide-react";
+import Logo, { LogoIcon } from "@/components/ui/Logo";
 
 export default function ActiveExamRoomPage({
   params,
@@ -578,12 +579,13 @@ export default function ActiveExamRoomPage({
       <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
         <header className="bg-white border-b border-slate-200">
           <div className="max-w-4xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
-                W
-              </div>
-              <span className="font-bold text-slate-900 text-xs sm:text-sm">WebQuiz Exam Submission</span>
-            </div>
+            <Logo
+              size="sm"
+              variant="indigo"
+              theme="light"
+              subtitle="Exam Submission"
+              href="/student/dashboard"
+            />
             <Link href="/student/dashboard" className="flat-button-primary text-xs py-1.5 px-3">
               Dashboard &rarr;
             </Link>
@@ -668,6 +670,7 @@ export default function ActiveExamRoomPage({
         <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
           {/* Left: Subject Code & Title */}
           <div className="flex items-center gap-2 min-w-0">
+            <LogoIcon size="xs" variant="indigo" />
             <span className="bg-indigo-600 text-white font-mono font-bold text-[11px] sm:text-xs px-2 py-0.5 border border-indigo-400 shrink-0">
               {quiz.subjectCode}
             </span>

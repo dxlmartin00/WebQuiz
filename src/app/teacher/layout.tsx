@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import TeacherSidebar from "@/components/layout/TeacherSidebar";
 import TeacherGuard from "@/components/layout/TeacherGuard";
 import { Menu, ShieldCheck } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 
 export default function TeacherLayout({
   children,
@@ -38,19 +39,18 @@ export default function TeacherLayout({
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-indigo-600 flex items-center justify-center font-black text-xs text-white border border-indigo-400">
-                W
-              </div>
-              <span className="font-bold text-sm tracking-tight text-white">
-                WebQuiz
-              </span>
-              {isAdmin && (
-                <span className="text-[9px] uppercase font-bold bg-amber-500/20 text-amber-300 px-1 py-0.2 border border-amber-500/40">
-                  Admin
-                </span>
-              )}
-            </div>
+            <Logo
+              size="xs"
+              variant="indigo"
+              theme="dark"
+              badge={
+                isAdmin ? (
+                  <span className="text-[9px] uppercase font-bold bg-amber-500/20 text-amber-300 px-1 py-0.2 border border-amber-500/40">
+                    Admin
+                  </span>
+                ) : undefined
+              }
+            />
           </div>
 
           <div className="flex items-center gap-2">

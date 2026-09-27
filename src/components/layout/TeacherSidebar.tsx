@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import Logo from "@/components/ui/Logo";
 
 interface TeacherSidebarProps {
   mobileOpen?: boolean;
@@ -71,26 +72,23 @@ export default function TeacherSidebar({
       {/* Brand Header */}
       <div>
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-indigo-600 flex items-center justify-center font-black text-base sm:text-lg text-white border border-indigo-400">
-              W
-            </div>
-            <div>
-              <div className="font-bold tracking-tight text-white flex items-center gap-1.5 text-sm sm:text-base">
-                WebQuiz{" "}
-                {isAdmin ? (
-                  <span className="text-[9px] sm:text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 border border-amber-500/40">
-                    Admin
-                  </span>
-                ) : (
-                  <span className="text-[9px] sm:text-[10px] uppercase font-semibold bg-indigo-900/90 text-indigo-300 px-1.5 py-0.5 border border-indigo-700">
-                    Faculty
-                  </span>
-                )}
-              </div>
-              <div className="text-[11px] sm:text-xs text-slate-400">Academic Portal</div>
-            </div>
-          </div>
+          <Logo
+            size="md"
+            variant="indigo"
+            theme="dark"
+            subtitle="Academic Portal"
+            badge={
+              isAdmin ? (
+                <span className="text-[9px] sm:text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 border border-amber-500/40">
+                  Admin
+                </span>
+              ) : (
+                <span className="text-[9px] sm:text-[10px] uppercase font-semibold bg-indigo-900/90 text-indigo-300 px-1.5 py-0.5 border border-indigo-700">
+                  Faculty
+                </span>
+              )
+            }
+          />
 
           {/* Close button for mobile */}
           {onCloseMobile && (
