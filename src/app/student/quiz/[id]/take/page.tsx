@@ -181,6 +181,11 @@ export default function ActiveExamRoomPage({
       isSubmittingRef.current = true;
       setSubmitting(true);
 
+      // Immediately cancel any pending background autosave
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+
       // Immediately cache to localStorage before attempting network call
       try {
         localStorage.setItem(`webquiz_answers_${id}`, JSON.stringify(answers));
@@ -201,9 +206,6 @@ export default function ActiveExamRoomPage({
           throw new Error(json.error || "Failed to submit quiz");
         }
 
-        if (autosaveTimerRef.current) {
-          clearTimeout(autosaveTimerRef.current);
-        }
         try {
           localStorage.removeItem(`webquiz_answers_${id}`);
           localStorage.removeItem(`webquiz_flagged_${id}`);
@@ -441,7 +443,7 @@ export default function ActiveExamRoomPage({
 
   // Keyboard Shortcuts for Test-Taking UX (A-D / 1-4 to pick options, arrows to navigate, F to flag)
   useEffect(() => {
-    if (loading || !data || result || offlineSubmitModal || violationModalOpen || showSubmitModal) return;
+    if (loading || !data || result || offlineSubmitModal || violationModalOpen || showSubmitModal || submitting) return;
 
     const handleExamKeys = (e: KeyboardEvent) => {
       // Don't intercept when user is typing in text inputs
@@ -507,6 +509,7 @@ export default function ActiveExamRoomPage({
     currentIdx,
     answers,
     handleToggleFlag,
+    submitting,
   ]);
 
   // Emergency Backup File Download
@@ -744,9 +747,9 @@ export default function ActiveExamRoomPage({
               type="button"
               onClick={() => setShowSubmitModal(true)}
               disabled={submitting}
-              className="flat-button-primary text-xs py-1.5 sm:py-2 px-3 sm:px-4 font-bold flex items-center gap-1 min-h-[38px] touch-manipulation"
+              className="flat-button-primary text-xs py-1.5 sm:py-2 px-3 sm:px-4 font-bold flex items-center gap-1 min-h-[38px] touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className={`w-3.5 h-3.5 ${submitting ? "animate-spin" : ""}`} />
               <span>{submitting ? "Submitting..." : "Finish"}</span>
             </button>
           </div>
@@ -991,9 +994,10 @@ export default function ActiveExamRoomPage({
                       handleAdvanceItem(false);
                     }
                   }}
-                  className="flat-button-primary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px]"
+                  disabled={submitting}
+                  className="flat-button-primary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>{currentIdx === questions.length - 1 ? "Finish & Submit" : "Lock & Next"}</span>
+                  <span>{currentIdx === questions.length - 1 ? (submitting ? "Submitting..." : "Finish & Submit") : "Lock & Next"}</span>
                   <ChevronRight className="w-4 h-4" />
                 </button>
               ) : (
@@ -1278,24 +1282,51 @@ export default function ActiveExamRoomPage({
               <button
                 type="button"
                 onClick={() => setShowSubmitModal(false)}
-                className="flat-button-secondary text-xs py-2 px-4 w-full sm:w-auto font-semibold"
+                disabled={submitting}
+                className="flat-button-secondary text-xs py-2 px-4 w-full sm:w-auto font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Keep Reviewing
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowSubmitModal(false);
-                  handleSubmitQuiz(false);
-                }}
+                onClick={() => handleSubmitQuiz(false)}
                 disabled={submitting}
-                className="flat-button-primary text-xs py-2 px-5 w-full sm:w-auto font-bold flex items-center justify-center gap-1.5"
+                className="flat-button-primary text-xs py-2 px-5 w-full sm:w-auto font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>{submitting ? "Submitting..." : "Confirm & Submit Examination"}</span>
+                <Send className={`w-3.5 h-3.5 ${submitting ? "animate-spin" : ""}`} />
+                <span>{submitting ? "Submitting & Grading..." : "Confirm & Submit Examination"}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Interaction Barrier during Submission & Grading */}
+      {submitting && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 select-none pointer-events-auto cursor-wait"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flat-card border-2 border-slate-900 bg-white p-6 sm:p-8 max-w-sm w-full text-center space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-indigo-50 border-2 border-indigo-600 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
+              <RefreshCw className="w-7 h-7 animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                Submitting &amp; Grading...
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Please wait while your answers are verified and graded.
+              </p>
+            </div>
+            <div className="w-full bg-slate-100 h-1.5 overflow-hidden">
+              <div className="bg-indigo-600 h-full w-2/3 animate-pulse"></div>
+            </div>
+            <p className="text-[11px] font-mono text-slate-400">
+              Do not close or reload this page.
+            </p>
           </div>
         </div>
       )}

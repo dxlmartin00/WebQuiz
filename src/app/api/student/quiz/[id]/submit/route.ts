@@ -65,8 +65,16 @@ export async function POST(
     let totalScore = 0;
     let totalPossiblePoints = 0;
     const evaluationBreakdown: any[] = [];
+    const answersToPersist: Array<{
+      submissionId: string;
+      questionId: string;
+      studentAnswer: string;
+      isCorrect: boolean;
+      pointsAwarded: number;
+      matchType: string | null;
+    }> = [];
 
-    // Evaluate each question server-side
+    // Evaluate each question in-memory (instant sub-millisecond CPU speed)
     for (const question of submission.quiz.questions) {
       if (question.type === "INSTRUCTION") {
         continue;
@@ -92,28 +100,13 @@ export async function POST(
 
       totalScore += evalResult.pointsAwarded;
 
-      // Upsert answer in database
-      await prisma.submissionAnswer.upsert({
-        where: {
-          submissionId_questionId: {
-            submissionId: submission.id,
-            questionId: question.id,
-          },
-        },
-        update: {
-          studentAnswer,
-          isCorrect: evalResult.isCorrect,
-          pointsAwarded: evalResult.pointsAwarded,
-          matchType: evalResult.matchType,
-        },
-        create: {
-          submissionId: submission.id,
-          questionId: question.id,
-          studentAnswer,
-          isCorrect: evalResult.isCorrect,
-          pointsAwarded: evalResult.pointsAwarded,
-          matchType: evalResult.matchType,
-        },
+      answersToPersist.push({
+        submissionId: submission.id,
+        questionId: question.id,
+        studentAnswer: String(studentAnswer || ""),
+        isCorrect: evalResult.isCorrect,
+        pointsAwarded: evalResult.pointsAwarded,
+        matchType: evalResult.matchType,
       });
 
       evaluationBreakdown.push({
@@ -130,17 +123,36 @@ export async function POST(
 
     const finalStatus = isAutoSubmit || isOverdue ? "AUTO_SUBMITTED" : "SUBMITTED";
 
-    // Update submission record
-    const updated = await prisma.submission.update({
-      where: { id: submission.id },
-      data: {
-        score: totalScore,
-        totalPoints: totalPossiblePoints,
-        submittedAt,
-        status: finalStatus,
-        studentName: studentName || submission.studentName,
-      },
-    });
+    // Atomically persist answers and update submission in ONE single batch transaction
+    const txOperations: any[] = [
+      prisma.submissionAnswer.deleteMany({
+        where: { submissionId: submission.id },
+      }),
+    ];
+
+    if (answersToPersist.length > 0) {
+      txOperations.push(
+        prisma.submissionAnswer.createMany({
+          data: answersToPersist,
+        })
+      );
+    }
+
+    txOperations.push(
+      prisma.submission.update({
+        where: { id: submission.id },
+        data: {
+          score: totalScore,
+          totalPoints: totalPossiblePoints,
+          submittedAt,
+          status: finalStatus,
+          studentName: studentName || submission.studentName,
+        },
+      })
+    );
+
+    const txResults = await prisma.$transaction(txOperations);
+    const updated = txResults[txResults.length - 1];
 
     return NextResponse.json({
       success: true,

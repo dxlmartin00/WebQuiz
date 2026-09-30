@@ -36,29 +36,32 @@ export async function POST(
       );
     }
 
-    // Upsert answers
-    for (const [questionId, studentAnswer] of Object.entries(answers)) {
-      await prisma.submissionAnswer.upsert({
-        where: {
-          submissionId_questionId: {
-            submissionId: submission.id,
-            questionId,
-          },
-        },
-        update: {
-          studentAnswer: String(studentAnswer || ""),
-        },
-        create: {
-          submissionId: submission.id,
-          questionId,
-          studentAnswer: String(studentAnswer || ""),
-          isCorrect: false,
-          pointsAwarded: 0,
-        },
-      });
+    const entries = Object.entries(answers);
+    if (entries.length === 0) {
+      return NextResponse.json({ success: true, savedCount: 0 });
     }
 
-    return NextResponse.json({ success: true, savedCount: Object.keys(answers).length });
+    const answersData = entries.map(([questionId, studentAnswer]) => ({
+      submissionId: submission.id,
+      questionId,
+      studentAnswer: String(studentAnswer || ""),
+      isCorrect: false,
+      pointsAwarded: 0,
+    }));
+
+    await prisma.$transaction([
+      prisma.submissionAnswer.deleteMany({
+        where: {
+          submissionId: submission.id,
+          questionId: { in: Object.keys(answers) },
+        },
+      }),
+      prisma.submissionAnswer.createMany({
+        data: answersData,
+      }),
+    ]);
+
+    return NextResponse.json({ success: true, savedCount: entries.length });
   } catch (error) {
     console.error("Autosave error:", error);
     return NextResponse.json({ error: "Autosave failed" }, { status: 500 });
