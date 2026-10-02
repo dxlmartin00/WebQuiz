@@ -19,7 +19,7 @@ import {
 interface LiveExamMonitorProps {
   quiz: any;
   submissions: any[];
-  onRefresh: () => void;
+  onRefresh: (isBackground?: boolean) => void;
   onResetAttempt: (student: any) => void;
   onViewReview: (student: any) => void;
 }
@@ -39,6 +39,12 @@ export function LiveExamMonitor({
 
   const totalGradable = (quiz?.questions || []).filter((q: any) => q.type !== "INSTRUCTION").length || 1;
 
+  // Keep a stable ref to onRefresh to avoid timer re-instantiations
+  const onRefreshRef = React.useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
   // Auto-polling effect
   useEffect(() => {
     if (!autoPoll) return;
@@ -48,7 +54,11 @@ export function LiveExamMonitor({
     const countdownTimer = setInterval(() => {
       setSecondsUntilNextPoll((prev) => {
         if (prev <= 1) {
-          onRefresh();
+          // Defer calling onRefresh outside React's render phase to prevent
+          // "Cannot update a component while rendering a different component"
+          setTimeout(() => {
+            onRefreshRef.current?.(true);
+          }, 0);
           return pollIntervalSec;
         }
         return prev - 1;
@@ -56,7 +66,7 @@ export function LiveExamMonitor({
     }, 1000);
 
     return () => clearInterval(countdownTimer);
-  }, [autoPoll, pollIntervalSec, onRefresh]);
+  }, [autoPoll, pollIntervalSec]);
 
   // Categorize students
   const inProgressList = submissions.filter((s) => s.status === "IN_PROGRESS");

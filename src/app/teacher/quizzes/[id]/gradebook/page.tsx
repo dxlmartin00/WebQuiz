@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -45,19 +45,22 @@ export default function QuizGradebookPage({
   const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState<"ROSTER" | "LIVE_MONITOR" | "ITEM_ANALYSIS">("ROSTER");
 
-  const fetchGradebook = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/teacher/quizzes/${id}/submissions`);
-      if (!res.ok) throw new Error("Failed to fetch gradebook");
-      const json = await res.json();
-      setData(json);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchGradebook = useCallback(
+    async (isBackground = false) => {
+      try {
+        if (!isBackground) setLoading(true);
+        const res = await fetch(`/api/teacher/quizzes/${id}/submissions`);
+        if (!res.ok) throw new Error("Failed to fetch gradebook");
+        const json = await res.json();
+        setData(json);
+      } catch (e: any) {
+        if (!isBackground) setError(e.message);
+      } finally {
+        if (!isBackground) setLoading(false);
+      }
+    },
+    [id]
+  );
 
   const handleResetAttempt = async (student: any) => {
     if (!student) return;
@@ -184,7 +187,7 @@ export default function QuizGradebookPage({
           </Link>
 
           <button
-            onClick={fetchGradebook}
+            onClick={() => fetchGradebook(false)}
             className="flat-button-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
             title="Refresh Live Submissions"
           >
