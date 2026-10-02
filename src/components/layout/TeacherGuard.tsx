@@ -35,7 +35,9 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
     }
   }, [session, status, pathname, router]);
 
-  // Real-time account liveness check: if admin deletes this teacher, auto logout immediately
+  // Real-time account liveness check: if admin deletes this teacher, auto logout
+  const lastCheckTimeRef = useRef(0);
+
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;
 
@@ -43,6 +45,7 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
 
     async function checkAccountLiveness() {
       if (isTerminatingRef.current || !isMounted) return;
+      lastCheckTimeRef.current = Date.now();
 
       try {
         const res = await fetch("/api/teacher/auth-status", {
@@ -62,12 +65,13 @@ export default function TeacherGuard({ children }: { children: React.ReactNode }
       }
     }
 
-    // Check every 3 seconds
-    const interval = setInterval(checkAccountLiveness, 3000);
+    // Heartbeat check every 2 minutes (120,000ms) instead of aggressive 3s polling
+    const interval = setInterval(checkAccountLiveness, 120000);
 
-    // Also check immediately when window gains focus or tab becomes visible
+    // Also check when window gains focus or tab becomes visible, throttled to once every 30s
     const handleVisibility = () => {
-      if (!document.hidden) {
+      const now = Date.now();
+      if (!document.hidden && now - lastCheckTimeRef.current > 30000) {
         checkAccountLiveness();
       }
     };

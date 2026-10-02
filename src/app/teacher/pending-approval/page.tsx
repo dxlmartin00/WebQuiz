@@ -51,12 +51,21 @@ export default function PendingApprovalPage() {
     // Check immediately once on mount
     checkApprovalStatus();
 
-    // Poll silently every 3 seconds
-    const interval = setInterval(checkApprovalStatus, 3000);
+    // Poll silently every 30 seconds (instead of aggressive 3s polling)
+    const interval = setInterval(checkApprovalStatus, 30000);
+
+    // Also check when tab becomes visible
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        checkApprovalStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [update, router]);
 

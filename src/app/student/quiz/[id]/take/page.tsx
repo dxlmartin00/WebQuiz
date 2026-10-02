@@ -306,6 +306,9 @@ export default function ActiveExamRoomPage({
         // Flush current answer to server draft immediately
         const currQ = questions[currentIdx];
         if (currQ && answers[currQ.id] !== undefined) {
+          if (autosaveTimerRef.current) {
+            clearTimeout(autosaveTimerRef.current);
+          }
           fetch(`/api/student/quiz/${id}/save`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -471,7 +474,7 @@ export default function ActiveExamRoomPage({
           console.error("Autosave draft error:", e);
           setSaveStatus("offline");
         }
-      }, 1000);
+      }, 2500);
     } else {
       setSaveStatus("offline");
     }
