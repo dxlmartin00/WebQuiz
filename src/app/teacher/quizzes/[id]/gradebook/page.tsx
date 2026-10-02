@@ -19,8 +19,12 @@ import {
   ArrowUpDown,
   TrendingUp,
   Filter,
+  BarChart3,
+  Radio,
 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastContext";
+import { LiveExamMonitor } from "@/components/teacher/LiveExamMonitor";
+import { ItemAnalysisView } from "@/components/teacher/ItemAnalysisView";
 
 export default function QuizGradebookPage({
   params,
@@ -39,6 +43,7 @@ export default function QuizGradebookPage({
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
   const [resettingStudent, setResettingStudent] = useState<any | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"ROSTER" | "LIVE_MONITOR" | "ITEM_ANALYSIS">("ROSTER");
 
   const fetchGradebook = async () => {
     try {
@@ -223,8 +228,54 @@ export default function QuizGradebookPage({
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Navigation Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-px">
+        <button
+          onClick={() => setActiveTab("ROSTER")}
+          className={`flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === "ROSTER"
+              ? "border-slate-900 text-slate-900 bg-white"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          <span>Student Gradebook Roster</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("LIVE_MONITOR")}
+          className={`flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === "LIVE_MONITOR"
+              ? "border-indigo-600 text-indigo-700 bg-indigo-50/50"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Radio className="w-4 h-4 text-indigo-600" />
+          <span>Live Exam Monitor</span>
+          {countInProgress > 0 && (
+            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold animate-pulse">
+              {countInProgress} active
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ITEM_ANALYSIS")}
+          className={`flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === "ITEM_ANALYSIS"
+              ? "border-emerald-600 text-emerald-800 bg-emerald-50/50"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-emerald-600" />
+          <span>Item Analysis & Diagnostics</span>
+        </button>
+      </div>
+
+      {activeTab === "ROSTER" && (
+        <>
+          {/* Summary KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="flat-card p-5 border-l-4 border-l-slate-900 bg-white">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Submissions / Enrolled
@@ -497,6 +548,22 @@ export default function QuizGradebookPage({
           </table>
         </div>
       </div>
+      </>
+      )}
+
+      {activeTab === "LIVE_MONITOR" && (
+        <LiveExamMonitor
+          quiz={quiz}
+          submissions={rawSubmissions}
+          onRefresh={fetchGradebook}
+          onResetAttempt={(s) => setResettingStudent(s)}
+          onViewReview={(s) => setSelectedSubmission(s)}
+        />
+      )}
+
+      {activeTab === "ITEM_ANALYSIS" && (
+        <ItemAnalysisView quiz={quiz} submissions={rawSubmissions} />
+      )}
 
       {/* Submission Review Drawer/Modal */}
       {selectedSubmission && (

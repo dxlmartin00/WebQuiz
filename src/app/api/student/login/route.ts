@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { encodeStudentToken, STUDENT_COOKIE_NAME, STUDENT_IDLE_TIMEOUT_MS } from "@/lib/student-session";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown-ip";
+    const rateCheck = checkRateLimit(`login:${ip}`, { limit: 12, windowMs: 60000 });
+    if (!rateCheck.isAllowed) {
+      const retrySecs = Math.ceil(rateCheck.resetMs / 1000);
+      return NextResponse.json(
+        { error: `Too many login attempts. Please wait ${retrySecs}s before trying again.` },
+        { status: 429, headers: { "Retry-After": String(retrySecs) } }
+      );
+    }
+
     const body = await req.json();
     const studentIdNumber = body.studentIdNumber?.trim().toUpperCase();
 
@@ -58,6 +69,11 @@ export async function POST(req: NextRequest) {
         expiresAt,
       },
     });
+
+    // Opportunistically clean up expired student sessions in background
+    prisma.studentSession.deleteMany({
+      where: { expiresAt: { lt: now } },
+    }).catch(() => {});
 
     const token = encodeStudentToken({
       studentIdNumber,

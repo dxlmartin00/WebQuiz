@@ -14,10 +14,12 @@ import {
   ExternalLink,
   Search,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { DuplicateQuizModal } from "@/components/teacher/DuplicateQuizModal";
 import { useToast } from "@/components/ui/ToastContext";
 
 export default function TeacherQuizzesPage() {
@@ -32,6 +34,9 @@ export default function TeacherQuizzesPage() {
   // Deletion modal
   const [quizToDelete, setQuizToDelete] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Duplication modal
+  const [quizToDuplicate, setQuizToDuplicate] = useState<{ id: string; title: string; subjectId: string } | null>(null);
 
   function getTeacherDeadlineLabel(deadlineAt?: string | null) {
     if (!deadlineAt) return null;
@@ -309,6 +314,15 @@ export default function TeacherQuizzesPage() {
                     <span className="hidden sm:inline">Edit</span>
                   </Link>
 
+                  <button
+                    onClick={() => setQuizToDuplicate({ id: quiz.id, title: quiz.title, subjectId: quiz.subjectId })}
+                    className="flat-button-secondary text-xs py-1.5 px-2.5 flex items-center gap-1 font-semibold text-slate-700 hover:text-indigo-600"
+                    title="Duplicate Quiz to Another Class"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="hidden sm:inline">Duplicate</span>
+                  </button>
+
                   <Link
                     href={`/teacher/quizzes/${quiz.id}/gradebook`}
                     className="flat-button-primary text-xs py-1.5 px-3 flex items-center gap-1 font-bold"
@@ -350,6 +364,14 @@ export default function TeacherQuizzesPage() {
         isDestructive={true}
         onConfirm={confirmDeleteQuiz}
         onCancel={() => setQuizToDelete(null)}
+      />
+
+      {/* Duplication Modal */}
+      <DuplicateQuizModal
+        isOpen={!!quizToDuplicate}
+        quiz={quizToDuplicate}
+        onClose={() => setQuizToDuplicate(null)}
+        onDuplicated={fetchQuizzes}
       />
     </div>
   );

@@ -5,16 +5,22 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    // Perform a lightweight query to generate active traffic and prevent Supabase from pausing
-    const teacherCount = await prisma.teacher.count();
+    // Perform a lightweight query to keep DB alive and clean up expired student sessions
+    const [teacherCount, cleanedSessions] = await Promise.all([
+      prisma.teacher.count(),
+      prisma.studentSession.deleteMany({
+        where: { expiresAt: { lt: new Date() } },
+      }),
+    ]);
     const timestamp = new Date().toISOString();
 
     return NextResponse.json({
       success: true,
-      service: "WebQuiz Supabase Keep-Alive Anti-Idling Heartbeat",
+      service: "WebQuiz Database Keep-Alive & Session Purge",
       timestamp,
       teacherCount,
-      message: "Database pinged successfully. Supabase will not pause.",
+      expiredSessionsPurged: cleanedSessions.count,
+      message: "Database pinged and expired sessions cleaned successfully.",
     });
   } catch (error: any) {
     console.error("Keep-Alive Cron Ping Error:", error);

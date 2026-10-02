@@ -41,25 +41,30 @@ export async function POST(
       return NextResponse.json({ success: true, savedCount: 0 });
     }
 
-    const answersData = entries.map(([questionId, studentAnswer]) => ({
-      submissionId: submission.id,
-      questionId,
-      studentAnswer: String(studentAnswer || ""),
-      isCorrect: false,
-      pointsAwarded: 0,
-    }));
-
-    await prisma.$transaction([
-      prisma.submissionAnswer.deleteMany({
-        where: {
-          submissionId: submission.id,
-          questionId: { in: Object.keys(answers) },
-        },
-      }),
-      prisma.submissionAnswer.createMany({
-        data: answersData,
-      }),
-    ]);
+    // In-place atomic upsert using the compound unique key (submissionId_questionId)
+    // Eliminates table lock contention and transaction deadlocks during concurrent multi-student exams
+    await Promise.all(
+      entries.map(([questionId, studentAnswer]) =>
+        prisma.submissionAnswer.upsert({
+          where: {
+            submissionId_questionId: {
+              submissionId: submission.id,
+              questionId,
+            },
+          },
+          update: {
+            studentAnswer: String(studentAnswer || ""),
+          },
+          create: {
+            submissionId: submission.id,
+            questionId,
+            studentAnswer: String(studentAnswer || ""),
+            isCorrect: false,
+            pointsAwarded: 0,
+          },
+        })
+      )
+    );
 
     return NextResponse.json({ success: true, savedCount: entries.length });
   } catch (error) {

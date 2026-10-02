@@ -107,6 +107,21 @@ export async function GET(
       maxViolations: quiz.maxViolations,
       isPublished: quiz.isPublished,
       deadlineAt: quiz.deadlineAt,
+      questions: quiz.questions.map((q) => {
+        let options: string[] = [];
+        let correctAnswers: string[] = [];
+        try { options = JSON.parse(q.options || "[]"); } catch {}
+        try { correctAnswers = JSON.parse(q.correctAnswers || "[]"); } catch {}
+        return {
+          id: q.id,
+          type: q.type,
+          prompt: q.prompt,
+          points: q.points,
+          options,
+          correctAnswers,
+          orderIndex: q.orderIndex,
+        };
+      }),
     },
     stats: {
       enrolledTotal: quiz.subject.enrollments.length,
