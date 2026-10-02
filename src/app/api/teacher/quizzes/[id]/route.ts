@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { evaluateAnswer } from "@/lib/grading";
 
 export async function GET(
   req: NextRequest,
@@ -126,24 +127,122 @@ export async function PUT(
     });
 
     if (questions && Array.isArray(questions)) {
-      await prisma.question.deleteMany({
+      // 1. Fetch existing questions to update them in place rather than blind deletion (which cascades and deletes student answers)
+      const existingQuestions = await prisma.question.findMany({
+        where: { quizId: id },
+      });
+      const existingMap = new Map(existingQuestions.map((eq) => [eq.id, eq]));
+
+      // 2. Update existing questions or create new ones
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const questionData = {
+          type: q.type || "MULTIPLE_CHOICE",
+          prompt: q.prompt?.trim() || "Untitled Question",
+          points: q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1),
+          options: JSON.stringify(q.options || []),
+          correctAnswers: JSON.stringify(q.correctAnswers || []),
+          isCaseSensitive: !!q.isCaseSensitive,
+          allowFuzzy: !!q.allowFuzzy,
+          fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
+          orderIndex: i,
+        };
+
+        if (q.id && existingMap.has(q.id)) {
+          // Update in place preserving question ID & all student answers
+          await prisma.question.update({
+            where: { id: q.id },
+            data: questionData,
+          });
+        } else {
+          // Create newly added question
+          await prisma.question.create({
+            data: {
+              quizId: id,
+              ...questionData,
+            },
+          });
+        }
+      }
+
+      // 3. Remove only questions that were explicitly deleted by the teacher
+      const retainedIds = new Set(
+        questions.filter((q: any) => q.id && existingMap.has(q.id)).map((q: any) => q.id)
+      );
+      const removedQuestionIds = existingQuestions
+        .filter((eq) => !retainedIds.has(eq.id))
+        .map((eq) => eq.id);
+
+      if (removedQuestionIds.length > 0) {
+        await prisma.question.deleteMany({
+          where: { id: { in: removedQuestionIds } },
+        });
+      }
+
+      // 4. Automatically re-evaluate and re-score all completed student submissions
+      // This ensures grades and answer evaluations reflect updated answer keys/points instantly
+      const freshQuestions = await prisma.question.findMany({
         where: { quizId: id },
       });
 
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        await prisma.question.create({
+      const freshTotalPoints = freshQuestions.reduce(
+        (sum, q) => sum + (q.type === "INSTRUCTION" ? 0 : q.points),
+        0
+      );
+
+      const completedSubmissions = await prisma.submission.findMany({
+        where: {
+          quizId: id,
+          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+        },
+        include: {
+          answers: true,
+        },
+      });
+
+      for (const sub of completedSubmissions) {
+        let newScore = 0;
+        const answerMap = new Map(sub.answers.map((a) => [a.questionId, a]));
+
+        for (const q of freshQuestions) {
+          if (q.type === "INSTRUCTION") continue;
+
+          const existingAns = answerMap.get(q.id);
+          if (existingAns) {
+            let correctAnswers: string[] = [];
+            try {
+              correctAnswers = JSON.parse(q.correctAnswers);
+            } catch {
+              correctAnswers = [];
+            }
+
+            const evalResult = evaluateAnswer(existingAns.studentAnswer, {
+              type: q.type,
+              points: q.points,
+              correctAnswers,
+              isCaseSensitive: q.isCaseSensitive,
+              allowFuzzy: q.allowFuzzy,
+              fuzzyThreshold: q.fuzzyThreshold,
+            });
+
+            newScore += evalResult.pointsAwarded;
+
+            await prisma.submissionAnswer.update({
+              where: { id: existingAns.id },
+              data: {
+                isCorrect: evalResult.isCorrect,
+                pointsAwarded: evalResult.pointsAwarded,
+                matchType: evalResult.matchType,
+              },
+            });
+          }
+        }
+
+        await prisma.submission.update({
+          where: { id: sub.id },
           data: {
-            quizId: id,
-            type: q.type || "MULTIPLE_CHOICE",
-            prompt: q.prompt?.trim() || "Untitled Question",
-            points: q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1),
-            options: JSON.stringify(q.options || []),
-            correctAnswers: JSON.stringify(q.correctAnswers || []),
-            isCaseSensitive: !!q.isCaseSensitive,
-            allowFuzzy: !!q.allowFuzzy,
-            fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
-            orderIndex: i,
+            score: newScore,
+            totalPoints: freshTotalPoints,
           },
         });
       }

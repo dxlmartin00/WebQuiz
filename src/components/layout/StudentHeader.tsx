@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, User, GraduationCap } from "lucide-react";
 import Logo from "@/components/ui/Logo";
+import StudentIdleWatcher from "@/components/student/StudentIdleWatcher";
 
 interface StudentHeaderProps {
   studentName?: string;
@@ -27,7 +28,9 @@ export default function StudentHeader({
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <>
+      <StudentIdleWatcher />
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
         {/* Brand */}
         <Logo
@@ -75,5 +78,6 @@ export default function StudentHeader({
         </div>
       </div>
     </header>
+    </>
   );
 }

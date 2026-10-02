@@ -7,9 +7,12 @@ export const STUDENT_COOKIE_NAME = "webquiz_student_session";
 const SESSION_SECRET = process.env.NEXTAUTH_SECRET || "webquiz-secure-student-session-secret-salt-2026";
 const MAX_SESSION_AGE_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
+export const STUDENT_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of idle inactivity terminates session
+
 export interface StudentSessionData {
   studentIdNumber: string;
   studentName: string;
+  sessionToken?: string;
 }
 
 /**
@@ -30,6 +33,7 @@ export function encodeStudentToken(data: StudentSessionData): string {
   const payload = JSON.stringify({
     studentIdNumber: cleanId,
     studentName: cleanName,
+    sessionToken: data.sessionToken || "",
     iat: Date.now(),
   });
 
@@ -42,7 +46,7 @@ export function encodeStudentToken(data: StudentSessionData): string {
 /**
  * Decodes and cryptographically verifies student session token with constant-time HMAC check.
  */
-export function decodeStudentToken(token: string): StudentSessionData | null {
+export function decodeStudentToken(token: string): (StudentSessionData & { iat?: number }) | null {
   if (!token || typeof token !== "string") return null;
 
   try {
@@ -72,7 +76,7 @@ export function decodeStudentToken(token: string): StudentSessionData | null {
       return null;
     }
 
-    // Expiration check
+    // Expiration check (Hard ceiling 7 days)
     if (data.iat && Date.now() - data.iat > MAX_SESSION_AGE_MS) {
       return null;
     }
@@ -80,20 +84,107 @@ export function decodeStudentToken(token: string): StudentSessionData | null {
     return {
       studentIdNumber: data.studentIdNumber.trim().toUpperCase(),
       studentName: data.studentName || "Student",
+      sessionToken: data.sessionToken || undefined,
+      iat: data.iat,
     };
-  } catch (err) {
+  } catch {
     return null;
   }
 }
 
 /**
- * Retrieves the current verified student session from cookies.
+ * Retrieves the current verified student session from cookies and validates against the database.
+ * Enforces:
+ * 1. Single Active Session: Only one device/browser session can be active per student ID at a time.
+ * 2. Idle Timeout: Terminates session if the student has been idle for more than STUDENT_IDLE_TIMEOUT_MS (30 mins).
  */
 export async function getStudentSession(): Promise<StudentSessionData | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(STUDENT_COOKIE_NAME)?.value;
   if (!token) return null;
-  return decodeStudentToken(token);
+
+  const decoded = decodeStudentToken(token);
+  if (!decoded) return null;
+
+  const cleanId = decoded.studentIdNumber.trim().toUpperCase();
+
+  try {
+    const activeSession = await prisma.studentSession.findUnique({
+      where: { studentIdNumber: cleanId },
+    });
+
+    if (!activeSession) {
+      // Session does not exist in DB (e.g. logged out, replaced, or expired)
+      return null;
+    }
+
+    // 1. DUPLICATION CHECK: Enforce single active session
+    // If the token in the cookie does not match the active sessionToken in DB,
+    // another login occurred on a different device/browser. Invalidate this duplicate session.
+    if (decoded.sessionToken && activeSession.sessionToken !== decoded.sessionToken) {
+      console.warn(`[StudentSession] Concurrent duplicate session rejected for student ${cleanId}`);
+      return null;
+    }
+
+    // 2. IDLE INACTIVITY TIMEOUT CHECK:
+    const now = Date.now();
+    const isExpired =
+      activeSession.expiresAt.getTime() < now ||
+      now - activeSession.lastActiveAt.getTime() > STUDENT_IDLE_TIMEOUT_MS;
+
+    if (isExpired) {
+      console.log(`[StudentSession] Session expired due to inactivity for student ${cleanId}`);
+      await prisma.studentSession
+        .delete({
+          where: { studentIdNumber: cleanId },
+        })
+        .catch(() => {});
+      return null;
+    }
+
+    // 3. SLIDING WINDOW ACTIVITY UPDATE:
+    // Update lastActiveAt and extend expiresAt (throttled to at most once every 60s to minimize database overhead)
+    if (now - activeSession.lastActiveAt.getTime() > 60 * 1000) {
+      await prisma.studentSession
+        .update({
+          where: { studentIdNumber: cleanId },
+          data: {
+            lastActiveAt: new Date(now),
+            expiresAt: new Date(now + STUDENT_IDLE_TIMEOUT_MS),
+          },
+        })
+        .catch(() => {});
+    }
+
+    return {
+      studentIdNumber: cleanId,
+      studentName: decoded.studentName,
+      sessionToken: activeSession.sessionToken,
+    };
+  } catch (err) {
+    console.error("Error verifying student session in database:", err);
+    // Graceful fallback to verified HMAC token if database is briefly unavailable
+    if (decoded.iat && Date.now() - decoded.iat < STUDENT_IDLE_TIMEOUT_MS) {
+      return {
+        studentIdNumber: cleanId,
+        studentName: decoded.studentName,
+        sessionToken: decoded.sessionToken,
+      };
+    }
+    return null;
+  }
+}
+
+/**
+ * Explicitly terminates the active student session in the database.
+ */
+export async function terminateStudentSession(studentIdNumber: string): Promise<void> {
+  const cleanId = studentIdNumber.trim().toUpperCase();
+  await prisma.studentSession
+    .deleteMany({
+      where: { studentIdNumber: cleanId },
+    })
+    .catch(() => {});
 }
 
 /**

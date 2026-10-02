@@ -25,6 +25,7 @@ import {
   Check,
 } from "lucide-react";
 import Logo, { LogoIcon } from "@/components/ui/Logo";
+import StudentIdleWatcher from "@/components/student/StudentIdleWatcher";
 
 export default function ActiveExamRoomPage({
   params,
@@ -709,6 +710,7 @@ export default function ActiveExamRoomPage({
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none exam-lockdown">
+      <StudentIdleWatcher />
       {/* Sticky Header Bar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
         <div className="max-w-6xl mx-auto px-2.5 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-2">

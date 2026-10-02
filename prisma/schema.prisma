@@ -145,3 +145,16 @@ model ViolationLog {
   @@index([submissionId])
   @@index([submissionId, timestamp])
 }
+
+model StudentSession {
+  id              String   @id @default(cuid())
+  studentIdNumber String   @unique // Enforces single active session per student ID
+  sessionToken    String   @unique
+  studentName     String
+  lastActiveAt    DateTime @default(now())
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([studentIdNumber])
+  @@index([sessionToken])
+}

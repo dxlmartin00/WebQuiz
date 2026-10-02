@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { encodeStudentToken, STUDENT_COOKIE_NAME } from "@/lib/student-session";
+import { encodeStudentToken, STUDENT_COOKIE_NAME, STUDENT_IDLE_TIMEOUT_MS } from "@/lib/student-session";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,9 +35,34 @@ export async function POST(req: NextRequest) {
     }
 
     const studentName = enrollments[0].studentName;
+    const sessionToken = crypto.randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + STUDENT_IDLE_TIMEOUT_MS);
+
+    // Enforce SINGLE ACTIVE SESSION:
+    // Upserting replaces any previous active session for this student ID,
+    // automatically terminating duplicate active sessions on other devices or tabs.
+    await prisma.studentSession.upsert({
+      where: { studentIdNumber },
+      create: {
+        studentIdNumber,
+        sessionToken,
+        studentName,
+        lastActiveAt: now,
+        expiresAt,
+      },
+      update: {
+        sessionToken,
+        studentName,
+        lastActiveAt: now,
+        expiresAt,
+      },
+    });
+
     const token = encodeStudentToken({
       studentIdNumber,
       studentName,
+      sessionToken,
     });
 
     const response = NextResponse.json({
@@ -54,7 +80,7 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7, // 7 days (session validity governed by StudentSession idle timeout)
     });
 
     return response;
