@@ -80,29 +80,31 @@ export default function ActiveExamRoomPage({
     }
   }, []);
 
-  // When virtual keyboard opens or resizes visualViewport, keep active input centered and visible
+  // When virtual keyboard opens or resizes visualViewport, ensure active input remains visible without fighting user scroll
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) return;
 
-    const handleViewportChange = () => {
+    const handleViewportResize = () => {
       const activeEl = document.activeElement as HTMLElement | null;
       if (
         activeEl &&
         (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
       ) {
-        setTimeout(() => {
-          activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 150);
+        const rect = activeEl.getBoundingClientRect();
+        const vvHeight = window.visualViewport?.height ?? window.innerHeight;
+        // Only adjust if the active input is actually occluded behind the virtual keyboard
+        if (rect.bottom > vvHeight - 12) {
+          activeEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
       }
     };
 
     const vv = window.visualViewport;
-    vv.addEventListener("resize", handleViewportChange);
-    vv.addEventListener("scroll", handleViewportChange);
+    vv.addEventListener("resize", handleViewportResize);
+    // Note: Do NOT add a listener to vv "scroll", so the user can freely scroll the page while typing.
 
     return () => {
-      vv.removeEventListener("resize", handleViewportChange);
-      vv.removeEventListener("scroll", handleViewportChange);
+      vv.removeEventListener("resize", handleViewportResize);
     };
   }, []);
 
@@ -275,8 +277,9 @@ export default function ActiveExamRoomPage({
     return () => clearInterval(interval);
   }, [offlineSubmitModal, handleSubmitQuiz]);
 
-  // Countdown Timer
+  // Countdown Timer (Only runs for WHOLE_QUIZ mode; PER_ITEM mode is paced question-by-question)
   useEffect(() => {
+    if (data?.quiz?.timerMode === "PER_ITEM") return;
     if (loading || !data || result || secondsRemaining === null || !timerInitializedRef.current) return;
 
     const timer = setInterval(() => {
@@ -708,11 +711,11 @@ export default function ActiveExamRoomPage({
     <div className="min-h-screen bg-slate-100 flex flex-col select-none exam-lockdown">
       {/* Sticky Header Bar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
+        <div className="max-w-6xl mx-auto px-2.5 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-2">
           {/* Left: Subject Code & Title */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <LogoIcon size="xs" variant="indigo" />
-            <span className="bg-indigo-600 text-white font-mono font-bold text-[11px] sm:text-xs px-2 py-0.5 border border-indigo-400 shrink-0">
+            <span className="bg-indigo-600 text-white font-mono font-bold text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 border border-indigo-400 shrink-0 max-w-[75px] xs:max-w-[120px] sm:max-w-none truncate">
               {quiz.subjectCode}
             </span>
             <span className="font-bold text-xs sm:text-sm text-slate-100 hidden md:inline truncate max-w-[180px] lg:max-w-xs">
@@ -722,7 +725,7 @@ export default function ActiveExamRoomPage({
 
           {/* Center: Authoritative Countdown Timer */}
           <div
-            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 font-mono text-xs sm:text-sm font-black border shrink-0 ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 font-mono text-xs sm:text-sm font-black border shrink-0 ${
               isTimeCritical
                 ? "bg-rose-950/90 border-rose-500 text-rose-400 animate-pulse"
                 : isPerItem
@@ -737,31 +740,31 @@ export default function ActiveExamRoomPage({
           </div>
 
           {/* Right: Network Status, Anti-Cheating Strikes & Submit Action */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {!isOnline && (
-              <div className="flex items-center gap-1 px-2 py-1 bg-amber-900/90 text-amber-200 border border-amber-600 text-[11px] font-bold font-mono">
+              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-amber-900/90 text-amber-200 border border-amber-600 text-[10px] sm:text-[11px] font-bold font-mono">
                 <WifiOff className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                <span className="hidden sm:inline">Offline Mode</span>
+                <span className="hidden sm:inline">Offline</span>
               </div>
             )}
 
             <div
-              className={`flex items-center gap-1 px-2 py-1 text-[11px] sm:text-xs font-mono font-bold border ${
+              className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs font-mono font-bold border ${
                 violationCount > 0
                   ? "bg-rose-950 text-rose-300 border-rose-700"
                   : "bg-slate-800 text-slate-300 border-slate-700"
               }`}
               title="Anti-Cheating Tab Switch Strikes"
             >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <ShieldAlert className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-400 shrink-0" />
               <span>
-                {violationCount}/{maxViolations} Strikes
+                {violationCount}/{maxViolations} <span className="hidden sm:inline">Strikes</span>
               </span>
             </div>
 
             {/* Auto-Save Status Indicator */}
             <div
-              className="hidden sm:flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono border bg-slate-800 border-slate-700 text-slate-300"
+              className="hidden md:flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono border bg-slate-800 border-slate-700 text-slate-300"
               title="Real-time exam auto-saving status"
             >
               {saveStatus === "saving" ? (
@@ -786,10 +789,10 @@ export default function ActiveExamRoomPage({
               type="button"
               onClick={() => setShowSubmitModal(true)}
               disabled={submitting}
-              className="flat-button-primary text-xs py-1.5 sm:py-2 px-3 sm:px-4 font-bold flex items-center gap-1 min-h-[38px] touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flat-button-primary text-xs py-1.5 sm:py-2 px-2.5 sm:px-4 font-bold flex items-center gap-1 min-h-[34px] sm:min-h-[38px] touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send className={`w-3.5 h-3.5 ${submitting ? "animate-spin" : ""}`} />
-              <span>{submitting ? "Submitting..." : "Finish"}</span>
+              <span className="hidden xs:inline sm:inline">{submitting ? "Submitting..." : "Finish"}</span>
             </button>
           </div>
         </div>
@@ -815,19 +818,17 @@ export default function ActiveExamRoomPage({
       )}
 
       {/* Main Exam Room Layout */}
-      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 pb-32 sm:pb-8 md:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 pb-12 sm:pb-8 md:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Left Col: Current Question Panel */}
         <div className="lg:col-span-8 flex flex-col space-y-4">
           {isPerItem && (
-            <div className="bg-amber-50 border border-amber-300 p-2.5 px-3.5 flex items-center justify-between text-xs text-amber-900 font-semibold shadow-2xs">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  <strong>Paced Exam Mode:</strong> {perItemDuration}s per item. Past questions are locked when advancing.
+            <div className="bg-amber-50/95 border-l-4 border-l-amber-500 border border-amber-200 p-2.5 sm:p-3 flex items-center gap-2.5 text-xs text-amber-900 shadow-2xs">
+              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+              <div className="flex-1 min-w-0 text-[11px] sm:text-xs leading-relaxed">
+                <strong className="text-amber-950 font-bold">Paced Exam Mode:</strong>{" "}
+                <span className="text-amber-800">
+                  {perItemDuration}s allotted per question. Past questions lock automatically when advancing.
                 </span>
-              </div>
-              <div className="font-mono font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 border border-amber-300 shrink-0">
-                {itemSecondsRemaining !== null ? `${itemSecondsRemaining}s left` : "--"}
               </div>
             </div>
           )}
@@ -843,7 +844,7 @@ export default function ActiveExamRoomPage({
                       : `Question ${currentIdx + 1} of ${questions.length}`}
                   </span>
 
-                  {currentQuestion.type !== "INSTRUCTION" && (
+                  {currentQuestion.type !== "INSTRUCTION" && !isPerItem && (
                     <button
                       type="button"
                       onClick={() => handleToggleFlag(currentQuestion.id)}
@@ -1007,7 +1008,7 @@ export default function ActiveExamRoomPage({
                             onFocus={(e) => {
                               const target = e.target;
                               setTimeout(() => {
-                                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                                target.scrollIntoView({ behavior: "smooth", block: "nearest" });
                               }, 250);
                             }}
                             className="flat-input text-base sm:text-sm py-3 px-3.5 w-full font-mono border-2 border-slate-300 focus:border-indigo-600 focus:bg-white transition-all shadow-xs"
@@ -1031,44 +1032,59 @@ export default function ActiveExamRoomPage({
 
             {/* Bottom Nav Buttons */}
             <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-2">
-              <button
-                onClick={() => !isPerItem && setCurrentIdx((p) => Math.max(0, p - 1))}
-                disabled={currentIdx === 0 || isPerItem}
-                className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
-                title={isPerItem ? "Previous questions are locked in Per-Item mode" : undefined}
-              >
-                {isPerItem ? <Lock className="w-3.5 h-3.5 text-slate-400" /> : <ChevronLeft className="w-4 h-4" />}
-                <span>{isPerItem ? "Previous (Locked)" : "Previous"}</span>
-              </button>
+              {!isPerItem ? (
+                <>
+                  <button
+                    onClick={() => setCurrentIdx((p) => Math.max(0, p - 1))}
+                    disabled={currentIdx === 0}
+                    className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </button>
 
-              <div className="text-[11px] font-mono text-slate-500">
-                {answeredCount} of {gradableQuestions.length} Answered
-              </div>
+                  <div className="text-[11px] font-mono text-slate-500 text-center">
+                    {answeredCount} of {gradableQuestions.length} Answered
+                  </div>
 
-              {isPerItem ? (
-                <button
-                  onClick={() => {
-                    if (currentIdx === questions.length - 1) {
-                      setShowSubmitModal(true);
-                    } else {
-                      handleAdvanceItem(false);
-                    }
-                  }}
-                  disabled={submitting}
-                  className="flat-button-primary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span>{currentIdx === questions.length - 1 ? (submitting ? "Submitting..." : "Finish & Submit") : "Lock & Next"}</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
+                    disabled={currentIdx === questions.length - 1}
+                    className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </>
               ) : (
-                <button
-                  onClick={() => setCurrentIdx((p) => Math.min(questions.length - 1, p + 1))}
-                  disabled={currentIdx === questions.length - 1}
-                  className="flat-button-secondary text-xs py-2 px-3 sm:px-4 font-semibold flex items-center gap-1 min-h-[40px] disabled:opacity-40"
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                <>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span className="hidden sm:inline text-slate-600">Past questions locked</span>
+                    <span className="text-[11px] text-slate-500 font-semibold">
+                      ({answeredCount}/{gradableQuestions.length} done)
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (currentIdx === questions.length - 1) {
+                        setShowSubmitModal(true);
+                      } else {
+                        handleAdvanceItem(false);
+                      }
+                    }}
+                    disabled={submitting}
+                    className="flat-button-primary text-xs py-2 px-4 sm:px-5 font-bold flex items-center gap-1.5 min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                  >
+                    <span>
+                      {currentIdx === questions.length - 1
+                        ? (submitting ? "Submitting..." : "Finish & Submit")
+                        : "Lock & Next"}
+                    </span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1079,13 +1095,44 @@ export default function ActiveExamRoomPage({
           <div className="flat-card p-4 sm:p-5 bg-white border border-slate-300 space-y-4 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <Grid className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Question Matrix</span>
+                {isPerItem ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Paced Progress</span>
+                  </>
+                ) : (
+                  <>
+                    <Grid className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Question Matrix</span>
+                  </>
+                )}
               </h2>
-              <span className="text-[11px] font-mono text-slate-400">
-                {answeredCount}/{gradableQuestions.length}
+              <span className="text-[11px] font-mono text-slate-500 font-bold">
+                {isPerItem
+                  ? `${Math.round(((currentIdx + 1) / questions.length) * 100)}%`
+                  : `${answeredCount}/${gradableQuestions.length}`}
               </span>
             </div>
+
+            {/* In Paced Mode, display visual progress bar */}
+            {isPerItem && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800">
+                    Question {currentIdx + 1} of {questions.length}
+                  </span>
+                  <span className="font-mono text-amber-900 font-bold bg-amber-50 px-2 py-0.5 border border-amber-200 text-[10px]">
+                    {questions.length - 1 - currentIdx} remaining
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 border border-slate-200 overflow-hidden">
+                  <div
+                    className="bg-amber-500 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.round(((currentIdx + 1) / questions.length) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Number grid */}
             <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
@@ -1130,7 +1177,7 @@ export default function ActiveExamRoomPage({
                         : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                     }`}
                   >
-                    {isFlagged && (
+                    {!isPerItem && isFlagged && (
                       <span
                         className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full border border-white"
                         title="Flagged for review"
@@ -1143,29 +1190,42 @@ export default function ActiveExamRoomPage({
             </div>
 
             <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] text-slate-500 font-medium">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-600 inline-block" />
-                <span>Answered</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-slate-100 border border-slate-300 inline-block" />
-                <span>Unanswered</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full inline-block" />
-                <span>Flagged</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
-                <span>Current</span>
-              </div>
-              {isPerItem && (
-                <div className="flex items-center gap-1.5 col-span-2">
-                  <span className="w-2.5 h-2.5 bg-slate-200 border border-slate-300 inline-block flex items-center justify-center">
-                    <Lock className="w-2 h-2 text-slate-500" />
-                  </span>
-                  <span>Locked Past Questions</span>
-                </div>
+              {!isPerItem ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-emerald-600 inline-block" />
+                    <span>Answered</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-100 border border-slate-300 inline-block" />
+                    <span>Unanswered</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-amber-500 rounded-full inline-block" />
+                    <span>Flagged</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
+                    <span>Current</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-900 inline-block ring-1 ring-indigo-500" />
+                    <span>Current</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-slate-200 border border-slate-300 inline-block flex items-center justify-center">
+                      <Lock className="w-2 h-2 text-slate-500" />
+                    </span>
+                    <span>Locked Past</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <span className="w-2.5 h-2.5 bg-slate-100 border border-slate-200 inline-block" />
+                    <span>Upcoming Locked Questions</span>
+                  </div>
+                </>
               )}
             </div>
           </div>
