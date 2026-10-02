@@ -17,7 +17,7 @@ import {
   Search,
   RefreshCw,
 } from "lucide-react";
-import { StatCardSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
+import { CardSkeleton } from "@/components/ui/Skeleton";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useToast } from "@/components/ui/ToastContext";
 
@@ -110,90 +110,88 @@ export default function StudentDashboardPage() {
       <StudentHeader studentName={student.studentName || student.name} studentIdNumber={student.studentIdNumber} />
 
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
-        {/* Welcome Card */}
-        <div className="flat-card p-5 sm:p-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="flat-badge-indigo text-[11px] font-mono">
-                Student Portal
-              </span>
-              <CopyButton text={student.studentIdNumber} className="bg-slate-800 text-slate-300 border-slate-700" />
+        {/* Welcome Card with Integrated Metrics */}
+        <div className="flat-card bg-slate-900 text-white border-2 border-slate-900 overflow-hidden shadow-sm">
+          <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flat-badge-indigo text-[10px] sm:text-[11px] font-mono">
+                  Student Portal
+                </span>
+                <CopyButton text={student.studentIdNumber} className="bg-slate-800 text-slate-300 border-slate-700 text-xs" />
+              </div>
+              <h1 className="text-lg sm:text-2xl font-black tracking-tight">
+                Welcome, {student.studentName || student.name || "Student"}
+              </h1>
+              <p className="text-xs text-slate-400">
+                Enrolled in {subjects.length} class {subjects.length === 1 ? "section" : "sections"}.
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-              Welcome, {student.studentName || student.name || "Student"}
-            </h1>
-            <p className="text-xs text-slate-400">
-              Enrolled in {subjects.length} class {subjects.length === 1 ? "section" : "sections"}.
-            </p>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                onClick={loadData}
+                className="px-3 py-1.5 border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors"
+                title="Refresh dashboard data"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Compact Informational Status Bar */}
+          <div className="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800 bg-slate-950/70 text-slate-300 select-none">
             <button
-              onClick={loadData}
-              className="px-3 py-1.5 border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors"
+              type="button"
+              onClick={() => setActiveTab("ACTIVE")}
+              className={`p-2.5 sm:py-3 sm:px-5 text-center sm:text-left transition-colors flex flex-col sm:flex-row sm:items-baseline sm:gap-2.5 group cursor-pointer ${
+                activeTab === "ACTIVE" ? "bg-indigo-950/50" : "hover:bg-slate-900/60"
+              }`}
+              title="View Active Quizzes"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-              <span>Refresh</span>
+              <span className="text-lg sm:text-2xl font-black font-mono text-indigo-400 leading-tight">
+                {loading ? "--" : activeQuizzes.length}
+              </span>
+              <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-slate-200 font-bold uppercase tracking-wider">
+                Active <span className="hidden sm:inline">Quizzes</span>
+              </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("COMPLETED")}
+              className={`p-2.5 sm:py-3 sm:px-5 text-center sm:text-left transition-colors flex flex-col sm:flex-row sm:items-baseline sm:gap-2.5 group cursor-pointer ${
+                activeTab === "COMPLETED" ? "bg-emerald-950/50" : "hover:bg-slate-900/60"
+              }`}
+              title="View Completed Exams"
+            >
+              <span className="text-lg sm:text-2xl font-black font-mono text-emerald-400 leading-tight">
+                {loading ? "--" : completedQuizzes.filter((q: any) => !q.expiredWithoutSubmission).length}
+              </span>
+              <span className="text-[10px] sm:text-xs text-slate-400 group-hover:text-slate-200 font-bold uppercase tracking-wider">
+                Completed <span className="hidden sm:inline">Exams</span>
+              </span>
+            </button>
+
+            <div className="p-2.5 sm:py-3 sm:px-5 text-center sm:text-left flex flex-col sm:flex-row sm:items-baseline sm:gap-2.5">
+              <span className="text-lg sm:text-2xl font-black font-mono text-amber-400 leading-tight">
+                {loading ? "--" : subjects.length}
+              </span>
+              <span className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Enrolled <span className="hidden sm:inline">Classes</span>
+              </span>
+            </div>
           </div>
-        </div>
-
-        {/* Quick Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          {loading ? (
-            <>
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-            </>
-          ) : (
-            <>
-              <div className="flat-card p-4 sm:p-5 border-l-4 border-l-indigo-600 bg-white">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Active Quizzes
-                </span>
-                <div className="text-2xl sm:text-3xl font-black text-indigo-600 mt-2 font-mono">
-                  {activeQuizzes.length}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                  Ready to take right now
-                </div>
-              </div>
-
-              <div className="flat-card p-4 sm:p-5 border-l-4 border-l-emerald-600 bg-white">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Completed Exams
-                </span>
-                <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-2 font-mono">
-                  {completedQuizzes.filter((q: any) => !q.expiredWithoutSubmission).length}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                  Auto-graded & recorded
-                </div>
-              </div>
-
-              <div className="flat-card p-4 sm:p-5 border-l-4 border-l-amber-600 bg-white">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Enrolled Classes
-                </span>
-                <div className="text-2xl sm:text-3xl font-black text-amber-600 mt-2 font-mono">
-                  {subjects.length}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                  Authorized by faculty
-                </div>
-              </div>
-            </>
-          )}
         </div>
 
         {/* Tab Navigation and Search Bar */}
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200">
-            <div className="flex gap-6 overflow-x-auto pb-px">
+            <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-px">
               <button
                 onClick={() => setActiveTab("ACTIVE")}
-                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`pb-2.5 sm:pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === "ACTIVE"
                     ? "border-indigo-600 text-indigo-600 font-black"
                     : "border-transparent text-slate-500 hover:text-slate-900"
@@ -203,7 +201,7 @@ export default function StudentDashboardPage() {
               </button>
               <button
                 onClick={() => setActiveTab("UPCOMING")}
-                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`pb-2.5 sm:pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === "UPCOMING"
                     ? "border-indigo-600 text-indigo-600 font-black"
                     : "border-transparent text-slate-500 hover:text-slate-900"
@@ -213,13 +211,14 @@ export default function StudentDashboardPage() {
               </button>
               <button
                 onClick={() => setActiveTab("COMPLETED")}
-                className={`pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`pb-2.5 sm:pb-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === "COMPLETED"
                     ? "border-indigo-600 text-indigo-600 font-black"
                     : "border-transparent text-slate-500 hover:text-slate-900"
                 }`}
               >
-                Submission History ({completedQuizzes.length})
+                <span className="sm:hidden">History ({completedQuizzes.length})</span>
+                <span className="hidden sm:inline">Submission History ({completedQuizzes.length})</span>
               </button>
             </div>
 
