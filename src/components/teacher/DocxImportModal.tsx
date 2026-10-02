@@ -299,8 +299,18 @@ Answer: ______________________
 26. Move Tool: _________`}
                   </pre>
                 </div>
+                <div>
+                  <p className="font-bold text-slate-800 mb-1">3. End-of-Document Answer Key (Auto-attached):</p>
+                  <pre className="bg-white p-2 border border-slate-200 font-mono text-[10px] text-slate-700">
+{`ANSWER KEY
+1. B
+2. True
+3. Photosynthesis
+4. A, 5. C, 6. False`}
+                  </pre>
+                </div>
                 <div className="p-2 bg-indigo-50 border border-indigo-200 text-indigo-900 text-[10px]">
-                  <strong>Note:</strong> All questions and choices will be cleanly detected. You can easily click the correct choice or enter the answer keys right in the quiz builder.
+                  <strong>Note:</strong> All questions, options, and answer keys (both inline and at the end of the document) will be cleanly detected. You can also adjust or click correct choices right in the quiz builder.
                 </div>
               </div>
             )}
@@ -621,24 +631,58 @@ D. Database management
 
                           {q.type === "TRUE_FALSE" && (
                             <div className="pl-5 flex flex-wrap items-center gap-2">
-                              <span className="px-2 py-0.5 border border-slate-300 bg-slate-50 text-[10px] font-bold text-slate-700">
-                                True
+                              <span
+                                className={`px-2 py-0.5 border text-[10px] font-bold ${
+                                  q.correctAnswers.includes("True")
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-400"
+                                    : "border-slate-300 bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                True {q.correctAnswers.includes("True") && "✓"}
                               </span>
-                              <span className="px-2 py-0.5 border border-slate-300 bg-slate-50 text-[10px] font-bold text-slate-700">
-                                False
+                              <span
+                                className={`px-2 py-0.5 border text-[10px] font-bold ${
+                                  q.correctAnswers.includes("False")
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-400"
+                                    : "border-slate-300 bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                False {q.correctAnswers.includes("False") && "✓"}
                               </span>
-                              <span className="text-[10px] text-amber-600 italic">
-                                (Answer left blank — select in quiz builder or import answer key)
-                              </span>
+                              {q.correctAnswers.length > 0 ? (
+                                <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 font-semibold">
+                                  ✓ Pre-marked: {q.correctAnswers[0]}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-amber-600 italic">
+                                  (Answer left blank — select in quiz builder or import answer key)
+                                </span>
+                              )}
                             </div>
                           )}
 
                           {q.type === "SHORT_ANSWER" && (
-                            <div className="pl-5 flex items-center gap-2 text-slate-500 italic text-[10px]">
-                              <span className="border border-dashed border-slate-300 px-2 py-0.5 bg-slate-50 text-slate-400 font-mono">
-                                ________
-                              </span>
-                              <span>(Identification — answer left blank to type in builder or import answer key)</span>
+                            <div className="pl-5 flex flex-wrap items-center gap-2 text-[10px]">
+                              {q.correctAnswers.length > 0 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-slate-600">Expected Answer:</span>
+                                  <span className="font-mono bg-emerald-50 border border-emerald-300 text-emerald-900 px-2 py-0.5 font-bold">
+                                    {q.correctAnswers[0]}
+                                  </span>
+                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 font-semibold">
+                                    ✓ Pre-marked
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="border border-dashed border-slate-300 px-2 py-0.5 bg-slate-50 text-slate-400 font-mono">
+                                    ________
+                                  </span>
+                                  <span className="text-slate-500 italic">
+                                    (Identification — answer left blank to type in builder or import answer key)
+                                  </span>
+                                </>
+                              )}
                             </div>
                           )}
 

@@ -23,15 +23,26 @@ interface RawQuestionBlock {
   answerLine?: string;
 }
 
+export interface AnswerKeyEntry {
+  num?: number;
+  letter?: string;
+  text: string;
+  sectionContext?: string;
+}
+
 type ParsedItem =
   | {
       kind: "INSTRUCTION";
       prompt: string;
+      sectionIndex?: number;
+      sectionTitle?: string;
     }
   | {
       kind: "QUESTION";
       block: RawQuestionBlock;
       sectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null;
+      sectionIndex?: number;
+      sectionTitle?: string;
     };
 
 /**
@@ -84,6 +95,111 @@ function isIgnoredHeaderLine(line: string): boolean {
 function isBlankPlaceholder(text: string): boolean {
   const clean = text.trim();
   return /^[_.\s\-]{2,}$/.test(clean);
+}
+
+/**
+ * Checks whether a line represents the start of an Answer Key section
+ * e.g., "Answer Key", "Key to Correction", "Correction Key", "Answers:", "Solutions", "Test I - Answer Key"
+ */
+export function isAnswerKeyHeader(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  // Standalone header: "Answer Key", "Answer Keys", "Key to Correction", "Answers", "Solutions", etc.
+  if (
+    /^(?:(?:final\s+)?answer\s*keys?|key\s*to\s*correction|correction\s*key|key\s*answers?|suggested\s*answers?|answers?|solutions?|key\s*answers?)[:\.\-]?\s*$/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  // Header with section/part: "Part I - Answer Key", "Test II: Key to Correction", etc.
+  if (
+    /^(?:part|test|section)\s+(?:[ivxlcdm]+|\d+|[a-z])\s*[:\.\-]?\s*(?:(?:final\s+)?answer\s*keys?|key\s*to\s*correction|correction\s*key|answers?)/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  // Inline header with answers immediately following: "Answer Key: 1. A, 2. B, 3. C" or "Answers: 1-A 2-B"
+  if (
+    /^(?:(?:final\s+)?answer\s*keys?|key\s*to\s*correction|correction\s*key|key\s*answers?|answers?)[\s.:\-]+(?:Q(?:uestion)?\s*)?\d+[\.\):\-\s]/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Extracts answer key entries from a line within the answer key section
+ */
+export function parseAnswerKeyLine(
+  line: string,
+  currentSectionContext?: string
+): { entries: AnswerKeyEntry[]; newSectionContext?: string } {
+  const trimmed = line.trim();
+  if (!trimmed) return { entries: [] };
+
+  // Strip leading "Answer Key:" prefix if present on this line
+  const stripped = trimmed.replace(
+    /^(?:(?:final\s+)?answer\s*keys?|key\s*to\s*correction|correction\s*key|key\s*answers?|suggested\s*answers?|answers?|solutions?)[\s.:\-]+/i,
+    ""
+  ).trim();
+
+  // Check if line is just a sub-section indicator inside answer key: "Part I", "Test 2", etc.
+  if (
+    /^(?:part|test|section)\s+(?:[ivxlcdm]+|\d+|[a-z])\b/i.test(stripped) &&
+    !/\d+[\.\)\-:]/.test(stripped.replace(/^(?:part|test|section)\s+[^\s]+/i, ""))
+  ) {
+    return { entries: [], newSectionContext: stripped };
+  }
+
+  const entries: AnswerKeyEntry[] = [];
+  const entryRegex = /(?:^|[\s,;|\t]+)(?:Q(?:uestion)?\s*)?(\d+)[\.\):\-\s]\s*([^\n\r]+?)(?=(?:[\s,;|\t]+(?:Q(?:uestion)?\s*)?\d+[\.\):\-\s]|$))/gi;
+  let match;
+  let foundAny = false;
+
+  while ((match = entryRegex.exec(stripped)) !== null) {
+    foundAny = true;
+    const num = parseInt(match[1], 10);
+    const rawVal = match[2].trim().replace(/^[,;\-–—\s]+|[,;\-–—\s]+$/g, "").trim();
+    if (!rawVal) continue;
+
+    const letterMatch = rawVal.match(/^[\(\[]?([A-Ha-h])[\)\]]?(?:[\.\:\-\s]+(.*))?$/);
+    let letter: string | undefined;
+    let text = rawVal;
+
+    if (letterMatch) {
+      letter = letterMatch[1].toUpperCase();
+      text = (letterMatch[2] || "").trim().replace(/^[\-–—:\.\s]+/, "").trim() || letter;
+    }
+
+    entries.push({
+      num,
+      letter,
+      text,
+      sectionContext: currentSectionContext,
+    });
+  }
+
+  if (!foundAny && stripped) {
+    // Single un-numbered item or letter
+    const letterMatch = stripped.match(/^[\(\[]?([A-Ha-h])[\)\]]?(?:[\.\:\-\s]+(.*))?$/);
+    if (letterMatch) {
+      const letter = letterMatch[1].toUpperCase();
+      const text = (letterMatch[2] || "").trim().replace(/^[\-–—:\.\s]+/, "").trim() || letter;
+      entries.push({ letter, text, sectionContext: currentSectionContext });
+    } else {
+      entries.push({ text: stripped, sectionContext: currentSectionContext });
+    }
+  }
+
+  return { entries };
 }
 
 /**
@@ -209,7 +325,14 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
   let currentBlock: RawQuestionBlock | null = null;
   let currentBlockSectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null = null;
   let activeSectionType: "TRUE_FALSE" | "MULTIPLE_CHOICE" | "SHORT_ANSWER" | null = null;
+  let activeSectionIndex = 0;
+  let activeSectionTitle: string | undefined = undefined;
   let pendingInstructionLines: string[] = [];
+
+  // Answer Key detection state
+  let inAnswerKeySection = false;
+  let currentKeySectionContext: string | undefined = undefined;
+  const collectedAnswerKeys: AnswerKeyEntry[] = [];
 
   const flushQuestion = () => {
     if (currentBlock) {
@@ -217,6 +340,8 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         kind: "QUESTION",
         block: currentBlock,
         sectionType: currentBlockSectionType,
+        sectionIndex: activeSectionIndex,
+        sectionTitle: activeSectionTitle,
       });
       currentBlock = null;
       currentBlockSectionType = null;
@@ -230,6 +355,8 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         items.push({
           kind: "INSTRUCTION",
           prompt: text,
+          sectionIndex: activeSectionIndex,
+          sectionTitle: activeSectionTitle,
         });
       }
       pendingInstructionLines = [];
@@ -245,13 +372,41 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       continue;
     }
 
-    // 2. Check if this line is a Section Header or Direction line
+    // 2. Check if this line triggers an Answer Key section
+    if (isAnswerKeyHeader(line)) {
+      flushInstruction();
+      flushQuestion();
+      inAnswerKeySection = true;
+      currentKeySectionContext = activeSectionTitle;
+
+      const { entries, newSectionContext } = parseAnswerKeyLine(line, currentKeySectionContext);
+      if (newSectionContext) currentKeySectionContext = newSectionContext;
+      if (entries.length > 0) collectedAnswerKeys.push(...entries);
+      continue;
+    }
+
+    // 3. If currently inside an Answer Key section:
+    if (inAnswerKeySection) {
+      const { entries, newSectionContext } = parseAnswerKeyLine(line, currentKeySectionContext);
+      if (newSectionContext) {
+        currentKeySectionContext = newSectionContext;
+      }
+      if (entries.length > 0) {
+        collectedAnswerKeys.push(...entries);
+      }
+      continue;
+    }
+
+    // 4. Check if this line is a Section Header or Direction line
     const isSec = isSectionHeader(line);
     const isDir = isDirectionLine(line);
 
     if (isSec || isDir) {
       // Flush previous question if one was in progress
       flushQuestion();
+
+      activeSectionIndex++;
+      activeSectionTitle = line;
 
       const detected = detectSectionType(line);
       if (detected) {
@@ -362,8 +517,66 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
     }
   }
 
+  const questionItems = items.filter(
+    (it): it is Extract<ParsedItem, { kind: "QUESTION" }> => it.kind === "QUESTION"
+  );
+
+  const matchesSection = (title: string, context: string): boolean => {
+    const normTitle = title.toLowerCase().trim();
+    const normContext = context.toLowerCase().trim();
+
+    const m1 = normTitle.match(/\b(part|test|section)\s+([ivxlcdm]+|\d+|[a-z])\b/i);
+    const m2 = normContext.match(/\b(part|test|section)\s+([ivxlcdm]+|\d+|[a-z])\b/i);
+
+    if (m1 && m2) {
+      return m1[1].toLowerCase() === m2[1].toLowerCase() && m1[2].toLowerCase() === m2[2].toLowerCase();
+    }
+
+    if (normTitle === normContext) return true;
+    const escaped = normContext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(normTitle);
+  };
+
+  const findKeyForQuestion = (
+    qItem: Extract<ParsedItem, { kind: "QUESTION" }>,
+    qIdx: number
+  ): AnswerKeyEntry | undefined => {
+    const qNum = qItem.block.number ? parseInt(qItem.block.number, 10) : undefined;
+
+    // 1. Try matching by section context + question number
+    if (qItem.sectionTitle && qNum !== undefined) {
+      const sectionMatch = collectedAnswerKeys.find((k) => {
+        if (k.num !== qNum || !k.sectionContext) return false;
+        return matchesSection(qItem.sectionTitle!, k.sectionContext);
+      });
+      if (sectionMatch) return sectionMatch;
+    }
+
+    // 2. Check if question numbers are globally unique in the exam
+    const numbersAreUnique =
+      questionItems.every((q) => q.block.number !== undefined) &&
+      new Set(questionItems.map((q) => q.block.number)).size === questionItems.length;
+
+    if (numbersAreUnique && qNum !== undefined) {
+      const numMatch = collectedAnswerKeys.find((k) => k.num === qNum);
+      if (numMatch) return numMatch;
+    }
+
+    // 3. Match by sequential question number (1-based index)
+    const seqNumMatch = collectedAnswerKeys.find((k) => k.num === qIdx + 1);
+    if (seqNumMatch) return seqNumMatch;
+
+    // 4. Match by sequential index in collectedAnswerKeys array
+    if (qIdx < collectedAnswerKeys.length) {
+      return collectedAnswerKeys[qIdx];
+    }
+
+    return undefined;
+  };
+
   // Convert parsed items to QuestionDraft[]
   const questions: QuestionDraft[] = [];
+  let gradableQuestionIdx = 0;
 
   for (const item of items) {
     if (item.kind === "INSTRUCTION") {
@@ -379,6 +592,9 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       });
       continue;
     }
+
+    const keyEntry = findKeyForQuestion(item, gradableQuestionIdx);
+    gradableQuestionIdx++;
 
     const block = item.block;
     let prompt = block.promptLines
@@ -435,9 +651,19 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
       block.answerLine !== undefined &&
       /^(?:true|false|t|f)$/i.test(block.answerLine.trim());
 
+    const isKeyTrueFalse =
+      keyEntry !== undefined &&
+      (/^(?:true|false|t|f)$/i.test(keyEntry.text) || keyEntry.letter === "T" || keyEntry.letter === "F");
+
     const isSectionTrueFalse = item.sectionType === "TRUE_FALSE" && rawOptions.length <= 2;
 
-    if (isExplicitTrueFalseChoices || isPromptTrueFalse || isSectionTrueFalse || (isAnswerTrueFalse && rawOptions.length <= 2)) {
+    if (
+      isExplicitTrueFalseChoices ||
+      isPromptTrueFalse ||
+      isSectionTrueFalse ||
+      (isAnswerTrueFalse && rawOptions.length <= 2) ||
+      (isKeyTrueFalse && rawOptions.length <= 2)
+    ) {
       type = "TRUE_FALSE";
       normalizedOptions.push("True", "False");
 
@@ -454,6 +680,13 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
           if (/^true$/i.test(marked.text) || marked.letter === "A") detectedTF = "True";
           else if (/^false$/i.test(marked.text) || marked.letter === "B") detectedTF = "False";
         }
+      }
+
+      if (!detectedTF && keyEntry) {
+        if (/^(?:true|t)$/i.test(keyEntry.text) || keyEntry.letter === "T") detectedTF = "True";
+        else if (/^(?:false|f)$/i.test(keyEntry.text) || keyEntry.letter === "F") detectedTF = "False";
+        else if (keyEntry.letter === "A") detectedTF = "True";
+        else if (keyEntry.letter === "B") detectedTF = "False";
       }
 
       if (detectedTF) {
@@ -493,6 +726,34 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         }
       }
 
+      if (!selectedOptionText && keyEntry) {
+        if (keyEntry.letter) {
+          const targetOpt = rawOptions.find((o) => o.letter === keyEntry.letter);
+          if (targetOpt) {
+            selectedOptionText = targetOpt.text;
+          }
+        }
+
+        if (!selectedOptionText && keyEntry.text) {
+          const matchingOpt = rawOptions.find(
+            (o) =>
+              o.text.toLowerCase() === keyEntry.text.toLowerCase() ||
+              keyEntry.text.toLowerCase().includes(o.text.toLowerCase()) ||
+              o.text.toLowerCase().includes(keyEntry.text.toLowerCase())
+          );
+          if (matchingOpt) {
+            selectedOptionText = matchingOpt.text;
+          }
+        }
+
+        if (!selectedOptionText && keyEntry.letter) {
+          const letterIdx = keyEntry.letter.charCodeAt(0) - 65;
+          if (letterIdx >= 0 && letterIdx < rawOptions.length) {
+            selectedOptionText = rawOptions[letterIdx].text;
+          }
+        }
+      }
+
       if (selectedOptionText) {
         correctAnswers.push(selectedOptionText);
       }
@@ -503,6 +764,12 @@ export function parseDocxQuestions(rawText: string): DocxParseResult {
         const ans = block.answerLine.trim();
         if (ans && !isBlankPlaceholder(ans)) {
           correctAnswers.push(ans);
+        }
+      }
+
+      if (correctAnswers.length === 0 && keyEntry) {
+        if (keyEntry.text && !isBlankPlaceholder(keyEntry.text)) {
+          correctAnswers.push(keyEntry.text);
         }
       }
     }

@@ -70,6 +70,42 @@ export default function ActiveExamRoomPage({
   const lastViolationTimeRef = useRef(0);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Mobile virtual keyboard & viewport tracking
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const textInputContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches);
+    }
+  }, []);
+
+  // When virtual keyboard opens or resizes visualViewport, keep active input centered and visible
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const handleViewportChange = () => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
+      ) {
+        setTimeout(() => {
+          activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 150);
+      }
+    };
+
+    const vv = window.visualViewport;
+    vv.addEventListener("resize", handleViewportChange);
+    vv.addEventListener("scroll", handleViewportChange);
+
+    return () => {
+      vv.removeEventListener("resize", handleViewportChange);
+      vv.removeEventListener("scroll", handleViewportChange);
+    };
+  }, []);
+
   // Network Online/Offline listeners
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -776,7 +812,7 @@ export default function ActiveExamRoomPage({
       )}
 
       {/* Main Exam Room Layout */}
-      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+      <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-4 md:p-6 pb-32 sm:pb-8 md:pb-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Left Col: Current Question Panel */}
         <div className="lg:col-span-8 flex flex-col space-y-4">
           {isPerItem && (
@@ -947,21 +983,42 @@ export default function ActiveExamRoomPage({
                         })}
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Type your answer below:
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Type answer here..."
-                          value={answers[currentQuestion.id] || ""}
-                          onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                          className="flat-input text-xs sm:text-sm py-2.5 sm:py-3 w-full font-mono"
-                          autoFocus
-                        />
-                        <p className="text-[11px] text-slate-400">
-                          Answer auto-saves locally immediately.
-                        </p>
+                      <div
+                        ref={textInputContainerRef}
+                        className="space-y-2.5 scroll-mt-24 scroll-mb-36"
+                      >
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Type your answer below:
+                          </label>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            Identification / Short Answer
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Type answer here..."
+                            value={answers[currentQuestion.id] || ""}
+                            onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                            onFocus={(e) => {
+                              const target = e.target;
+                              setTimeout(() => {
+                                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                              }, 250);
+                            }}
+                            className="flat-input text-base sm:text-sm py-3 px-3.5 w-full font-mono border-2 border-slate-300 focus:border-indigo-600 focus:bg-white transition-all shadow-xs"
+                            autoFocus={!isTouchDevice}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span>Answer auto-saves locally immediately.</span>
+                          {answers[currentQuestion.id]?.trim() && (
+                            <span className="text-emerald-700 font-bold flex items-center gap-1 font-mono">
+                              ✓ Saved locally
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
