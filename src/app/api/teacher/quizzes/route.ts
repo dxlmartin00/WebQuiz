@@ -48,11 +48,10 @@ export async function GET() {
         },
       },
       questions: {
-        select: { id: true, points: true },
+        select: { points: true },
       },
       submissions: {
         select: {
-          id: true,
           score: true,
           status: true,
           violationCount: true,
@@ -161,7 +160,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create Quiz
+    const questionRecords = (questions && Array.isArray(questions))
+      ? questions.map((q: any, i: number) => ({
+          type: q.type || "MULTIPLE_CHOICE",
+          prompt: q.prompt?.trim() || "Untitled Question",
+          points: q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1),
+          options: JSON.stringify(q.options || []),
+          correctAnswers: JSON.stringify(q.correctAnswers || []),
+          isCaseSensitive: !!q.isCaseSensitive,
+          allowFuzzy: !!q.allowFuzzy,
+          fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
+          orderIndex: i,
+        }))
+      : [];
+
+    // Create Quiz and all its questions in a single atomic database operation
     const quiz = await prisma.quiz.create({
       data: {
         subjectId,
@@ -176,28 +189,14 @@ export async function POST(req: NextRequest) {
         isPublished: !!isPublished,
         shuffleQuestions: !!shuffleQuestions,
         shuffleChoices: !!shuffleChoices,
+        questions: questionRecords.length > 0 ? {
+          createMany: {
+            data: questionRecords,
+          },
+        } : undefined,
       },
+      select: { id: true, title: true, isPublished: true },
     });
-
-    // Bulk insert questions in a single query for maximum performance
-    if (questions && Array.isArray(questions) && questions.length > 0) {
-      const questionRecords = questions.map((q, i) => ({
-        quizId: quiz.id,
-        type: q.type || "MULTIPLE_CHOICE",
-        prompt: q.prompt?.trim() || "Untitled Question",
-        points: q.type === "INSTRUCTION" ? 0 : (Number(q.points) || 1),
-        options: JSON.stringify(q.options || []),
-        correctAnswers: JSON.stringify(q.correctAnswers || []),
-        isCaseSensitive: !!q.isCaseSensitive,
-        allowFuzzy: !!q.allowFuzzy,
-        fuzzyThreshold: Number(q.fuzzyThreshold) || 1,
-        orderIndex: i,
-      }));
-
-      await prisma.question.createMany({
-        data: questionRecords,
-      });
-    }
 
     return NextResponse.json({ quiz }, { status: 201 });
   } catch (error) {

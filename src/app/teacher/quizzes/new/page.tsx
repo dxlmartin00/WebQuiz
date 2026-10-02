@@ -93,6 +93,7 @@ export default function NewQuizPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -405,11 +406,10 @@ export default function NewQuizPage() {
         localStorage.removeItem(DRAFT_STORAGE_KEY);
       } catch {}
 
+      setRedirecting(true);
       router.push("/teacher/quizzes");
-      router.refresh();
     } catch (e: any) {
       setError(e.message);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -487,11 +487,17 @@ export default function NewQuizPage() {
 
             <button
               onClick={handleSaveQuiz}
-              disabled={submitting}
+              disabled={submitting || redirecting}
               className="flat-button-primary text-xs py-2 px-4 flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>{submitting ? "Publishing..." : "Save & Publish Quiz"}</span>
+              <span>
+                {redirecting
+                  ? "Redirecting..."
+                  : submitting
+                  ? "Publishing Quiz..."
+                  : "Save & Publish Quiz"}
+              </span>
             </button>
           </div>
         </div>
@@ -1186,11 +1192,17 @@ export default function NewQuizPage() {
           <button
             type="button"
             onClick={handleSaveQuiz}
-            disabled={submitting}
+            disabled={submitting || redirecting}
             className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
-            <span>{submitting ? "Saving..." : "Publish Quiz & Rules"}</span>
+            <span>
+              {redirecting
+                ? "Redirecting..."
+                : submitting
+                ? "Publishing Quiz..."
+                : "Publish Quiz & Rules"}
+            </span>
           </button>
         </div>
       </div>

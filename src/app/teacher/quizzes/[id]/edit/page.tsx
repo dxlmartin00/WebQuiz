@@ -74,6 +74,7 @@ export default function EditQuizPage({
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -394,11 +395,10 @@ export default function EditQuizPage({
         localStorage.removeItem(`${DRAFT_STORAGE_KEY_PREFIX}${id}`);
       } catch {}
 
+      setRedirecting(true);
       router.push(`/teacher/quizzes/${id}/gradebook`);
-      router.refresh();
     } catch (e: any) {
       setError(e.message);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -484,11 +484,17 @@ export default function EditQuizPage({
 
             <button
               onClick={handleUpdateQuiz}
-              disabled={submitting}
+              disabled={submitting || redirecting}
               className="flat-button-primary text-xs py-2 px-4 flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>{submitting ? "Saving Changes..." : "Save Changes"}</span>
+              <span>
+                {redirecting
+                  ? "Redirecting..."
+                  : submitting
+                  ? "Saving Changes..."
+                  : "Save Changes"}
+              </span>
             </button>
           </div>
         </div>
@@ -1157,11 +1163,17 @@ export default function EditQuizPage({
           <button
             type="button"
             onClick={handleUpdateQuiz}
-            disabled={submitting}
+            disabled={submitting || redirecting}
             className="flat-button-primary text-xs py-2.5 px-6 font-bold flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
-            <span>{submitting ? "Saving..." : "Save Changes"}</span>
+            <span>
+              {redirecting
+                ? "Redirecting..."
+                : submitting
+                ? "Saving Changes..."
+                : "Save Changes"}
+            </span>
           </button>
         </div>
       </div>
