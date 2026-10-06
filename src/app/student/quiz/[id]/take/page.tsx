@@ -400,15 +400,38 @@ export default function ActiveExamRoomPage({
   useEffect(() => {
     if (loading || !data || result || offlineSubmitModal) return;
 
+    let blurGraceTimeout: NodeJS.Timeout | null = null;
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        // Tab switch or minimizing window is an immediate intentional infraction
+        if (blurGraceTimeout) {
+          clearTimeout(blurGraceTimeout);
+          blurGraceTimeout = null;
+        }
         recordViolation("TAB_SWITCH", "Navigated away from active quiz tab");
       }
     };
 
     const handleWindowBlur = () => {
       if (!document.hidden && !isModalOpenRef.current) {
-        recordViolation("WINDOW_BLUR", "Browser window lost focus");
+        // Floating notification, chathead, or OS overlay:
+        // Provide a 2.5s grace period so transient alerts/swipes do not trigger false strikes.
+        if (blurGraceTimeout) clearTimeout(blurGraceTimeout);
+        blurGraceTimeout = setTimeout(() => {
+          if (!document.hidden && !isModalOpenRef.current) {
+            recordViolation("WINDOW_BLUR", "Browser window lost focus for more than 2.5 seconds");
+          }
+          blurGraceTimeout = null;
+        }, 2500);
+      }
+    };
+
+    const handleWindowFocus = () => {
+      // Returned or dismissed overlay within the 2.5s grace period
+      if (blurGraceTimeout) {
+        clearTimeout(blurGraceTimeout);
+        blurGraceTimeout = null;
       }
     };
 
@@ -435,14 +458,17 @@ export default function ActiveExamRoomPage({
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
     window.addEventListener("keydown", handleKeyDown);
     document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("copy", handleCopy);
     document.addEventListener("paste", handlePaste);
 
     return () => {
+      if (blurGraceTimeout) clearTimeout(blurGraceTimeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("copy", handleCopy);

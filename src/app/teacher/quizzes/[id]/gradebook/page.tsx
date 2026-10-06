@@ -20,10 +20,8 @@ import {
   TrendingUp,
   Filter,
   BarChart3,
-  Radio,
 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastContext";
-import { LiveExamMonitor } from "@/components/teacher/LiveExamMonitor";
 import { ItemAnalysisView } from "@/components/teacher/ItemAnalysisView";
 
 export default function QuizGradebookPage({
@@ -43,7 +41,7 @@ export default function QuizGradebookPage({
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
   const [resettingStudent, setResettingStudent] = useState<any | null>(null);
   const [isResetting, setIsResetting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"ROSTER" | "LIVE_MONITOR" | "ITEM_ANALYSIS">("ROSTER");
+  const [activeTab, setActiveTab] = useState<"ROSTER" | "ITEM_ANALYSIS">("ROSTER");
 
   const fetchGradebook = useCallback(
     async (isBackground = false) => {
@@ -96,7 +94,16 @@ export default function QuizGradebookPage({
 
   useEffect(() => {
     fetchGradebook();
-  }, [id]);
+
+    // Silent background auto-polling every 8 seconds for live roster updates
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchGradebook(true);
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [fetchGradebook]);
 
   if (loading && !data) {
     return (
@@ -186,14 +193,20 @@ export default function QuizGradebookPage({
             <span>Back to Quizzes</span>
           </Link>
 
-          <button
-            onClick={() => fetchGradebook(false)}
-            className="flat-button-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
-            title="Refresh Live Submissions"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-            <span>Refresh Telemetry</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 select-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live Sync</span>
+            </div>
+            <button
+              onClick={() => fetchGradebook(false)}
+              className="flat-button-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+              title="Force Refresh Gradebook"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -243,21 +256,9 @@ export default function QuizGradebookPage({
         >
           <FileSpreadsheet className="w-4 h-4" />
           <span>Student Gradebook Roster</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("LIVE_MONITOR")}
-          className={`flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
-            activeTab === "LIVE_MONITOR"
-              ? "border-indigo-600 text-indigo-700 bg-indigo-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          <Radio className="w-4 h-4 text-indigo-600" />
-          <span>Live Exam Monitor</span>
           {countInProgress > 0 && (
-            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold animate-pulse">
-              {countInProgress} active
+            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.2 font-bold animate-pulse">
+              {countInProgress} in progress
             </span>
           )}
         </button>
@@ -487,11 +488,14 @@ export default function QuizGradebookPage({
                     </td>
                     <td className="px-4 py-3">
                       {s.status === "SUBMITTED" ? (
-                        <span className="flat-badge-emerald">Submitted</span>
+                        <span className="flat-badge-emerald font-bold">Submitted</span>
                       ) : s.status === "AUTO_SUBMITTED" ? (
-                        <span className="flat-badge-amber">Auto-Submitted</span>
+                        <span className="flat-badge-amber font-bold">Auto-Submitted</span>
                       ) : s.status === "IN_PROGRESS" ? (
-                        <span className="flat-badge-indigo">In Progress</span>
+                        <span className="flat-badge-indigo inline-flex items-center gap-1.5 font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                          In Progress
+                        </span>
                       ) : (
                         <span className="flat-badge-slate">Not Started</span>
                       )}
@@ -552,16 +556,6 @@ export default function QuizGradebookPage({
         </div>
       </div>
       </>
-      )}
-
-      {activeTab === "LIVE_MONITOR" && (
-        <LiveExamMonitor
-          quiz={quiz}
-          submissions={rawSubmissions}
-          onRefresh={fetchGradebook}
-          onResetAttempt={(s) => setResettingStudent(s)}
-          onViewReview={(s) => setSelectedSubmission(s)}
-        />
       )}
 
       {activeTab === "ITEM_ANALYSIS" && (

@@ -737,6 +737,16 @@ export default function EditQuizPage({
             <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
               <input
                 type="checkbox"
+                checked={shuffleQuestions}
+                onChange={(e) => setShuffleQuestions(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+              />
+              <span>Shuffle Questions Order</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
                 checked={shuffleChoices}
                 onChange={(e) => setShuffleChoices(e.target.checked)}
                 className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"

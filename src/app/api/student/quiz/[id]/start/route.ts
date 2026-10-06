@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
+function seededShuffle<T>(array: T[], seedStr: string): T[] {
+  let hash = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+    hash |= 0;
+  }
+  let s = Math.abs(hash) || 12345;
+  const rng = () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 export async function POST(
   req: NextRequest,
@@ -155,9 +174,9 @@ export async function POST(
         parsedOptions = [];
       }
 
-      // Shuffle choices if enabled
+      // Shuffle choices if enabled (deterministic per student attempt & question)
       if (quiz.shuffleChoices && parsedOptions.length > 1 && q.type === "MULTIPLE_CHOICE") {
-        parsedOptions = [...parsedOptions].sort(() => Math.random() - 0.5);
+        parsedOptions = seededShuffle(parsedOptions, `${submission.id}_${q.id}`);
       }
 
       return {
@@ -172,8 +191,8 @@ export async function POST(
       };
     });
 
-    if (quiz.shuffleQuestions) {
-      processedQuestions = processedQuestions.sort(() => Math.random() - 0.5);
+    if (quiz.shuffleQuestions && processedQuestions.length > 1) {
+      processedQuestions = seededShuffle(processedQuestions, submission.id);
     }
 
     // Map existing saved answers if any
