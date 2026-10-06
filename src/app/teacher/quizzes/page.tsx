@@ -268,11 +268,19 @@ export default function TeacherQuizzesPage() {
                   <span>Enrolled: {quiz.enrolledCount}</span>
                   <span>•</span>
                   <span>Max Violations: {quiz.maxViolations}</span>
+                  {quiz.startAt && (
+                    <>
+                      <span>•</span>
+                      <span className={new Date(quiz.startAt) > new Date() ? "text-amber-700 font-semibold" : ""}>
+                        Opens: {new Date(quiz.startAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </span>
+                    </>
+                  )}
                   {quiz.deadlineAt && (
                     <>
                       <span>•</span>
-                      <span>
-                        Deadline: {new Date(quiz.deadlineAt).toLocaleDateString()}
+                      <span className={new Date(quiz.deadlineAt) < new Date() ? "text-rose-600 font-semibold" : ""}>
+                        Deadline: {new Date(quiz.deadlineAt).toLocaleDateString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       </span>
                     </>
                   )}

@@ -106,6 +106,7 @@ export async function GET(
       durationMinutes: quiz.durationMinutes,
       maxViolations: quiz.maxViolations,
       isPublished: quiz.isPublished,
+      startAt: quiz.startAt,
       deadlineAt: quiz.deadlineAt,
       questions: quiz.questions.map((q) => {
         let options: string[] = [];

@@ -23,14 +23,37 @@ import {
   KeyRound,
   RotateCcw,
   History,
+  Calendar,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
 import { DocxImportModal } from "@/components/teacher/DocxImportModal";
 import { AnswerKeyModal } from "@/components/teacher/AnswerKeyModal";
 import { ShortAnswerSynonymsInput } from "@/components/teacher/ShortAnswerSynonymsInput";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 
 const DRAFT_STORAGE_KEY = "webquiz_teacher_quiz_draft_new";
+
+function formatWindowDuration(startStr: string, deadlineStr: string): string {
+  try {
+    const s = new Date(startStr);
+    const d = new Date(deadlineStr);
+    const diffMs = d.getTime() - s.getTime();
+    if (diffMs <= 0) return "Invalid";
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const mins = totalMinutes % 60;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (mins > 0 && days === 0) parts.push(`${mins}m`);
+    return parts.join(" ") || "< 1m";
+  } catch {
+    return "";
+  }
+}
 
 const DEFAULT_QUESTIONS: QuestionDraft[] = [
   {
@@ -111,6 +134,7 @@ export default function NewQuizPage() {
   const [timerMode, setTimerMode] = useState<"WHOLE_QUIZ" | "PER_ITEM">("WHOLE_QUIZ");
   const [timePerItemSeconds, setTimePerItemSeconds] = useState(60);
   const [maxViolations, setMaxViolations] = useState(3);
+  const [startAt, setStartAt] = useState("");
   const [deadlineAt, setDeadlineAt] = useState("");
   const [isPublished, setIsPublished] = useState(true);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
@@ -151,6 +175,7 @@ export default function NewQuizPage() {
               }
               if (typeof draft.timePerItemSeconds === "number") setTimePerItemSeconds(draft.timePerItemSeconds);
               if (typeof draft.maxViolations === "number") setMaxViolations(draft.maxViolations);
+              if (typeof draft.startAt === "string") setStartAt(draft.startAt);
               if (typeof draft.deadlineAt === "string") setDeadlineAt(draft.deadlineAt);
               if (typeof draft.isPublished === "boolean") setIsPublished(draft.isPublished);
               if (typeof draft.shuffleQuestions === "boolean") setShuffleQuestions(draft.shuffleQuestions);
@@ -202,6 +227,7 @@ export default function NewQuizPage() {
           timerMode,
           timePerItemSeconds,
           maxViolations,
+          startAt,
           deadlineAt,
           isPublished,
           shuffleQuestions,
@@ -226,6 +252,7 @@ export default function NewQuizPage() {
     timerMode,
     timePerItemSeconds,
     maxViolations,
+    startAt,
     deadlineAt,
     isPublished,
     shuffleQuestions,
@@ -375,6 +402,11 @@ export default function NewQuizPage() {
       return;
     }
 
+    if (startAt && deadlineAt && new Date(deadlineAt) <= new Date(startAt)) {
+      setError("Closing deadline must be set after the quiz start time.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -390,6 +422,7 @@ export default function NewQuizPage() {
           timerMode,
           timePerItemSeconds: Number(timePerItemSeconds) || 60,
           maxViolations: Number(maxViolations) || 3,
+          startAt: startAt ? new Date(startAt).toISOString() : null,
           deadlineAt: deadlineAt ? new Date(deadlineAt).toISOString() : null,
           isPublished,
           shuffleQuestions,
@@ -735,18 +768,6 @@ export default function NewQuizPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-              Deadline Window (Optional)
-            </label>
-            <input
-              type="datetime-local"
-              value={deadlineAt}
-              onChange={(e) => setDeadlineAt(e.target.value)}
-              className="flat-input text-xs"
-            />
-          </div>
-
           <div className="flex flex-col justify-end space-y-2">
             <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
               <input
@@ -777,6 +798,57 @@ export default function NewQuizPage() {
               />
               <span>Shuffle MCQ Choices</span>
             </label>
+          </div>
+        </div>
+
+        {/* Dedicated Paired Availability & Schedule Window Section */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Quiz Availability & Schedule Window</span>
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Set when students can begin taking the quiz and when submissions lock. Both are optional.
+              </p>
+            </div>
+
+            {/* Live Window Duration Indicator */}
+            {startAt && deadlineAt && (
+              <div>
+                {new Date(deadlineAt) <= new Date(startAt) ? (
+                  <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 inline-flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>Deadline must be after start time</span>
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-indigo-600" />
+                    <span>Availability window: {formatWindowDuration(startAt, deadlineAt)}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DateTimePicker
+              label="Starting Date & Time (Opens At)"
+              helperText="Students cannot open or answer this quiz before this timestamp. Leave empty to open immediately."
+              value={startAt}
+              onChange={setStartAt}
+              placeholder="Open immediately upon publishing"
+            />
+
+            <DateTimePicker
+              label="Closing Deadline (Closes At)"
+              helperText="Submissions automatically lock after this timestamp. Leave empty for no closing deadline."
+              value={deadlineAt}
+              onChange={setDeadlineAt}
+              minDate={startAt || undefined}
+              placeholder="No deadline (Never closes)"
+            />
           </div>
         </div>
       </div>

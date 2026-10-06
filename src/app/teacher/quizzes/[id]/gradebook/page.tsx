@@ -211,13 +211,29 @@ export default function QuizGradebookPage({
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="flat-badge-indigo font-mono text-xs font-bold">
                 {quiz.subjectCode}
               </span>
               <span className="text-xs text-slate-500">{quiz.subjectTitle}</span>
               <span className="text-xs text-slate-400">&bull;</span>
               <span className="text-xs text-slate-500">{quiz.totalPoints} Total Points</span>
+              {quiz.startAt && (
+                <>
+                  <span className="text-xs text-slate-400">&bull;</span>
+                  <span className="text-xs text-slate-600">
+                    Opens: {new Date(quiz.startAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                </>
+              )}
+              {quiz.deadlineAt && (
+                <>
+                  <span className="text-xs text-slate-400">&bull;</span>
+                  <span className="text-xs text-slate-600">
+                    Deadline: {new Date(quiz.deadlineAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                </>
+              )}
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
               {quiz.title} - Gradebook & Integrity Audit
