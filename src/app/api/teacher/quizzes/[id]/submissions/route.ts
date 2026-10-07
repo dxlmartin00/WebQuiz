@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, isSystemAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isSubmissionExpired, finalizeExpiredSubmission } from "@/lib/auto-finalize";
 
 export async function GET(
   req: NextRequest,
@@ -60,7 +61,39 @@ export async function GET(
     return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
   }
 
-  const totalPoints = quiz.questions.reduce((sum, q) => sum + q.points, 0);
+  // Auto-finalize any in-progress submissions that expired due to time or deadline
+  const now = new Date();
+  for (let i = 0; i < quiz.submissions.length; i++) {
+    const s = quiz.submissions[i];
+    if (s.status === "IN_PROGRESS" && isSubmissionExpired(s, quiz, now)) {
+      try {
+        const finalized = await finalizeExpiredSubmission(s, quiz.questions, now);
+        s.status = "AUTO_SUBMITTED";
+        s.score = finalized.score;
+        s.submittedAt = finalized.submittedAt;
+        const ansMap = new Map(finalized.evaluatedAnswers.map((a) => [a.questionId, a]));
+        s.answers = quiz.questions
+          .filter((q) => q.type !== "INSTRUCTION")
+          .map((q) => {
+            const ev = ansMap.get(q.id);
+            return {
+              id: `${s.id}_${q.id}`,
+              submissionId: s.id,
+              questionId: q.id,
+              studentAnswer: ev?.studentAnswer || "",
+              isCorrect: ev?.isCorrect || false,
+              pointsAwarded: ev?.pointsAwarded || 0,
+              matchType: ev?.matchType || "INCORRECT",
+              question: q,
+            } as any;
+          });
+      } catch (err) {
+        console.error(`Error auto-finalizing expired submission ${s.id}:`, err);
+      }
+    }
+  }
+
+  const totalPoints = quiz.questions.reduce((sum, q) => sum + (q.type === "INSTRUCTION" ? 0 : q.points), 0);
 
   const submissionMap = new Map();
   for (const s of quiz.submissions) {
@@ -104,6 +137,11 @@ export async function GET(
       subjectTitle: quiz.subject.title,
       totalPoints,
       durationMinutes: quiz.durationMinutes,
+      timerMode: quiz.timerMode,
+      timePerItemSeconds: quiz.timePerItemSeconds,
+      timePerMcSeconds: quiz.timePerMcSeconds,
+      timePerTfSeconds: quiz.timePerTfSeconds,
+      timePerSaSeconds: quiz.timePerSaSeconds,
       maxViolations: quiz.maxViolations,
       isPublished: quiz.isPublished,
       startAt: quiz.startAt,

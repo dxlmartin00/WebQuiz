@@ -21,6 +21,7 @@ import {
   RotateCcw,
   History,
   Calendar,
+  Lock,
 } from "lucide-react";
 import { QuestionDraft } from "@/types/quiz";
 import { SmartRulesAssistant } from "@/components/teacher/SmartRulesAssistant";
@@ -115,6 +116,9 @@ export default function EditQuizPage({
   const [durationMinutes, setDurationMinutes] = useState(20);
   const [timerMode, setTimerMode] = useState<"WHOLE_QUIZ" | "PER_ITEM">("WHOLE_QUIZ");
   const [timePerItemSeconds, setTimePerItemSeconds] = useState(60);
+  const [timePerMcSeconds, setTimePerMcSeconds] = useState(45);
+  const [timePerTfSeconds, setTimePerTfSeconds] = useState(30);
+  const [timePerSaSeconds, setTimePerSaSeconds] = useState(60);
   const [maxViolations, setMaxViolations] = useState(3);
   const [startAt, setStartAt] = useState("");
   const [deadlineAt, setDeadlineAt] = useState("");
@@ -140,6 +144,9 @@ export default function EditQuizPage({
           durationMinutes: q.durationMinutes,
           timerMode: q.timerMode || "WHOLE_QUIZ",
           timePerItemSeconds: q.timePerItemSeconds || 60,
+          timePerMcSeconds: q.timePerMcSeconds || 45,
+          timePerTfSeconds: q.timePerTfSeconds || 30,
+          timePerSaSeconds: q.timePerSaSeconds || 60,
           maxViolations: q.maxViolations,
           startAt: formatForDatetimeLocal(q.startAt),
           deadlineAt: formatForDatetimeLocal(q.deadlineAt),
@@ -173,6 +180,9 @@ export default function EditQuizPage({
               setDurationMinutes(draft.durationMinutes ?? serverSnapshot.durationMinutes);
               setTimerMode(draft.timerMode ?? serverSnapshot.timerMode);
               setTimePerItemSeconds(draft.timePerItemSeconds ?? serverSnapshot.timePerItemSeconds);
+              setTimePerMcSeconds(draft.timePerMcSeconds ?? serverSnapshot.timePerMcSeconds);
+              setTimePerTfSeconds(draft.timePerTfSeconds ?? serverSnapshot.timePerTfSeconds);
+              setTimePerSaSeconds(draft.timePerSaSeconds ?? serverSnapshot.timePerSaSeconds);
               setMaxViolations(draft.maxViolations ?? serverSnapshot.maxViolations);
               setStartAt(draft.startAt ?? serverSnapshot.startAt);
               setDeadlineAt(draft.deadlineAt ?? serverSnapshot.deadlineAt);
@@ -196,6 +206,9 @@ export default function EditQuizPage({
           setDurationMinutes(serverSnapshot.durationMinutes);
           setTimerMode(serverSnapshot.timerMode);
           setTimePerItemSeconds(serverSnapshot.timePerItemSeconds);
+          setTimePerMcSeconds(serverSnapshot.timePerMcSeconds);
+          setTimePerTfSeconds(serverSnapshot.timePerTfSeconds);
+          setTimePerSaSeconds(serverSnapshot.timePerSaSeconds);
           setMaxViolations(serverSnapshot.maxViolations);
           setStartAt(serverSnapshot.startAt);
           setDeadlineAt(serverSnapshot.deadlineAt);
@@ -227,6 +240,9 @@ export default function EditQuizPage({
           durationMinutes,
           timerMode,
           timePerItemSeconds,
+          timePerMcSeconds,
+          timePerTfSeconds,
+          timePerSaSeconds,
           maxViolations,
           startAt,
           deadlineAt,
@@ -252,6 +268,9 @@ export default function EditQuizPage({
     durationMinutes,
     timerMode,
     timePerItemSeconds,
+    timePerMcSeconds,
+    timePerTfSeconds,
+    timePerSaSeconds,
     maxViolations,
     startAt,
     deadlineAt,
@@ -416,6 +435,9 @@ export default function EditQuizPage({
           durationMinutes: Number(durationMinutes) || 20,
           timerMode,
           timePerItemSeconds: Number(timePerItemSeconds) || 60,
+          timePerMcSeconds: Number(timePerMcSeconds) || 45,
+          timePerTfSeconds: Number(timePerTfSeconds) || 30,
+          timePerSaSeconds: Number(timePerSaSeconds) || 60,
           maxViolations: Number(maxViolations) || 3,
           startAt: startAt ? new Date(startAt).toISOString() : null,
           deadlineAt: deadlineAt ? new Date(deadlineAt).toISOString() : null,
@@ -456,6 +478,13 @@ export default function EditQuizPage({
   );
   const gradableQuestionsCount = questions.filter((q) => q.type !== "INSTRUCTION").length;
   const instructionNotesCount = questions.filter((q) => q.type === "INSTRUCTION").length;
+
+  const mcCount = questions.filter((q) => q.type === "MULTIPLE_CHOICE").length;
+  const tfCount = questions.filter((q) => q.type === "TRUE_FALSE").length;
+  const saCount = questions.filter((q) => q.type === "SHORT_ANSWER").length;
+  const estimatedPacedSeconds =
+    mcCount * timePerMcSeconds + tfCount * timePerTfSeconds + saCount * timePerSaSeconds;
+  const estimatedPacedMinutes = Math.max(1, Math.round(estimatedPacedSeconds / 60));
 
   return (
     <div className="p-6 sm:p-8 space-y-8 max-w-5xl">
@@ -677,8 +706,8 @@ export default function EditQuizPage({
         </div>
 
         {/* Timing & Safeguards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
-          {timerMode === "WHOLE_QUIZ" ? (
+        {timerMode === "WHOLE_QUIZ" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
                 <Clock className="w-3 h-3 text-slate-500" />
@@ -693,87 +722,178 @@ export default function EditQuizPage({
                 className="flat-input text-xs font-mono"
               />
             </div>
-          ) : (
+
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-amber-600" />
-                <span>Seconds Per Item</span>
+                <ShieldAlert className="w-3 h-3 text-rose-500" />
+                <span>Max Tab Blur Strikes</span>
               </label>
-              <div className="relative">
+              <input
+                type="number"
+                value={maxViolations}
+                onChange={(e) => setMaxViolations(Number(e.target.value))}
+                min={1}
+                max={10}
+                className="flat-input text-xs font-mono"
+              />
+            </div>
+
+            <div className="flex flex-col justify-end space-y-2">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={shuffleQuestions}
+                  onChange={(e) => setShuffleQuestions(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+                />
+                <span>Shuffle Questions Order</span>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={shuffleChoices}
+                  onChange={(e) => setShuffleChoices(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+                />
+                <span>Shuffle MCQ Choices</span>
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            {/* Type-Specific Paced Timer Grid */}
+            <div className="p-3.5 bg-amber-50/60 border border-amber-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-950">
+                    Paced Seconds Per Question Type
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-amber-800 font-semibold">
+                  Estimated total: ~{estimatedPacedMinutes} min exam time
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Multiple Choice */}
+                <div className="bg-white border border-amber-200/80 p-2.5 space-y-1 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Multiple Choice</span>
+                    <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 border border-indigo-200">
+                      {mcCount} {mcCount === 1 ? "item" : "items"}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={timePerMcSeconds}
+                      onChange={(e) => setTimePerMcSeconds(Math.max(5, Number(e.target.value)))}
+                      min={5}
+                      max={600}
+                      className="flat-input text-xs font-mono pr-9"
+                    />
+                    <span className="absolute right-2.5 top-2 text-[10px] font-mono text-slate-400">sec</span>
+                  </div>
+                </div>
+
+                {/* True / False */}
+                <div className="bg-white border border-amber-200/80 p-2.5 space-y-1 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">True / False</span>
+                    <span className="text-[10px] font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 border border-amber-200">
+                      {tfCount} {tfCount === 1 ? "item" : "items"}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={timePerTfSeconds}
+                      onChange={(e) => setTimePerTfSeconds(Math.max(5, Number(e.target.value)))}
+                      min={5}
+                      max={600}
+                      className="flat-input text-xs font-mono pr-9"
+                    />
+                    <span className="absolute right-2.5 top-2 text-[10px] font-mono text-slate-400">sec</span>
+                  </div>
+                </div>
+
+                {/* Short Answer */}
+                <div className="bg-white border border-amber-200/80 p-2.5 space-y-1 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Short Answer</span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 border border-emerald-200">
+                      {saCount} {saCount === 1 ? "item" : "items"}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={timePerSaSeconds}
+                      onChange={(e) => setTimePerSaSeconds(Math.max(5, Number(e.target.value)))}
+                      min={5}
+                      max={600}
+                      className="flat-input text-xs font-mono pr-9"
+                    />
+                    <span className="absolute right-2.5 top-2 text-[10px] font-mono text-slate-400">sec</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Safeguards & Anti-Cheat */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
+                  <ShieldAlert className="w-3 h-3 text-rose-500" />
+                  <span>Max Tab Blur Strikes</span>
+                </label>
                 <input
                   type="number"
-                  value={timePerItemSeconds}
-                  onChange={(e) => setTimePerItemSeconds(Math.max(5, Number(e.target.value)))}
-                  min={5}
-                  max={600}
-                  className="flat-input text-xs font-mono pr-10"
+                  value={maxViolations}
+                  onChange={(e) => setMaxViolations(Number(e.target.value))}
+                  min={1}
+                  max={10}
+                  className="flat-input text-xs font-mono"
                 />
-                <span className="absolute right-2.5 top-2 text-[11px] font-mono text-slate-400">sec</span>
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">
-                ~{Math.round((questions.filter(q => q.type !== 'INSTRUCTION').length * timePerItemSeconds) / 60)} min total estimated exam time.
-              </p>
+
+              <div className="flex flex-col justify-end space-y-2">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={shuffleQuestions}
+                    onChange={(e) => setShuffleQuestions(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+                  />
+                  <span>Shuffle Questions Order</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={shuffleChoices}
+                    onChange={(e) => setShuffleChoices(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+                  />
+                  <span>Shuffle MCQ Choices</span>
+                </label>
+              </div>
             </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
-              <ShieldAlert className="w-3 h-3 text-rose-500" />
-              <span>Max Tab Blur Strikes</span>
-            </label>
-            <input
-              type="number"
-              value={maxViolations}
-              onChange={(e) => setMaxViolations(Number(e.target.value))}
-              min={1}
-              max={10}
-              className="flat-input text-xs font-mono"
-            />
           </div>
-
-          <div className="flex flex-col justify-end space-y-2">
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isPublished}
-                onChange={(e) => setIsPublished(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
-              />
-              <span>Published & Live</span>
-            </label>
-
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={shuffleQuestions}
-                onChange={(e) => setShuffleQuestions(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
-              />
-              <span>Shuffle Questions Order</span>
-            </label>
-
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={shuffleChoices}
-                onChange={(e) => setShuffleChoices(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
-              />
-              <span>Shuffle MCQ Choices</span>
-            </label>
-          </div>
-        </div>
+        )}
 
         {/* Dedicated Paired Availability & Schedule Window Section */}
-        <div className="pt-4 border-t border-slate-100 space-y-3">
+        <div className="pt-4 border-t border-slate-100 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Quiz Availability & Schedule Window</span>
+                <span>Quiz Publication & Availability Schedule</span>
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Set when students can begin taking the quiz and when submissions lock. Both are optional.
+                Manage publishing visibility, scheduled start time, and closing deadline.
               </p>
             </div>
 
@@ -782,7 +902,7 @@ export default function EditQuizPage({
               <div>
                 {new Date(deadlineAt) <= new Date(startAt) ? (
                   <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 inline-flex items-center gap-1">
-                    <ShieldAlert className="w-3 h-3 text-rose-600" />
+                    <AlertCircle className="w-3 h-3" />
                     <span>Deadline must be after start time</span>
                   </span>
                 ) : (
@@ -793,6 +913,67 @@ export default function EditQuizPage({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Real-time Publication Status Card */}
+          <div className={`p-3.5 border transition-all ${isPublished ? "bg-emerald-50/50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900">
+                    Publication Visibility:
+                  </span>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 border ${
+                      isPublished
+                        ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                        : "bg-slate-200 text-slate-700 border-slate-300"
+                    }`}
+                  >
+                    {isPublished ? "Published (Visible to Students)" : "Draft (Offline / Hidden)"}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-600 pt-0.5">
+                  {isPublished ? (
+                    startAt && new Date(startAt) > new Date() ? (
+                      <span className="text-indigo-800 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>
+                          <strong>Scheduled:</strong> Students will see this quiz under <em>Upcoming Quizzes</em>, but questions remain locked until{" "}
+                          <strong>{new Date(startAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</strong>.
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-emerald-800 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          <strong>Active & Open:</strong> Enrolled students can see and take this quiz right now.
+                        </span>
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-slate-600 flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>
+                        <strong>Private Draft:</strong> Completely hidden from students. Even if the starting date passes, students cannot access it until you publish.
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none bg-white border border-slate-300 px-3 py-1.5 shadow-2xs hover:bg-slate-50 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded-none border-slate-300"
+                />
+                <span className="text-xs font-bold text-slate-800">
+                  {isPublished ? "Published" : "Keep as Draft"}
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

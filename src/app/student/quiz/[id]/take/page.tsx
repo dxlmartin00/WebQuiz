@@ -165,7 +165,12 @@ export default function ActiveExamRoomPage({
         const durationSecs = Math.max(10, json.remainingSeconds || json.quiz.durationMinutes * 60);
         setSecondsRemaining(durationSecs);
         if (json.quiz?.timerMode === "PER_ITEM") {
-          setItemSecondsRemaining(json.quiz.timePerItemSeconds || 60);
+          const firstQ = json.questions?.[0];
+          let firstSec = json.quiz.timePerItemSeconds || 60;
+          if (firstQ?.type === "MULTIPLE_CHOICE") firstSec = json.quiz.timePerMcSeconds || firstSec;
+          else if (firstQ?.type === "TRUE_FALSE") firstSec = json.quiz.timePerTfSeconds || firstSec;
+          else if (firstQ?.type === "SHORT_ANSWER") firstSec = json.quiz.timePerSaSeconds || firstSec;
+          setItemSecondsRemaining(firstSec);
         }
         timerInitializedRef.current = true;
         setViolationCount(json.submission?.violationCount || 0);
@@ -304,7 +309,6 @@ export default function ActiveExamRoomPage({
       if (isSubmittingRef.current || result) return;
 
       const questions = data?.questions || [];
-      const perItemDuration = data?.quiz?.timePerItemSeconds || 60;
 
       if (currentIdx < questions.length - 1) {
         // Flush current answer to server draft immediately
@@ -320,8 +324,14 @@ export default function ActiveExamRoomPage({
           }).catch(() => {});
         }
 
+        const nextQ = questions[currentIdx + 1];
+        let nextDuration = data?.quiz?.timePerItemSeconds || 60;
+        if (nextQ?.type === "MULTIPLE_CHOICE") nextDuration = data?.quiz?.timePerMcSeconds || nextDuration;
+        else if (nextQ?.type === "TRUE_FALSE") nextDuration = data?.quiz?.timePerTfSeconds || nextDuration;
+        else if (nextQ?.type === "SHORT_ANSWER") nextDuration = data?.quiz?.timePerSaSeconds || nextDuration;
+
         setCurrentIdx((p) => p + 1);
-        setItemSecondsRemaining(perItemDuration);
+        setItemSecondsRemaining(nextDuration);
       } else {
         // Final question reached or expired!
         handleSubmitQuiz(isAuto);
@@ -721,8 +731,14 @@ export default function ActiveExamRoomPage({
 
   const { quiz, questions } = data;
   const isPerItem = quiz?.timerMode === "PER_ITEM";
-  const perItemDuration = quiz?.timePerItemSeconds || 60;
   const currentQuestion = questions[currentIdx];
+  const currentItemDuration = currentQuestion?.type === "MULTIPLE_CHOICE"
+    ? (quiz?.timePerMcSeconds || quiz?.timePerItemSeconds || 45)
+    : currentQuestion?.type === "TRUE_FALSE"
+    ? (quiz?.timePerTfSeconds || quiz?.timePerItemSeconds || 30)
+    : currentQuestion?.type === "SHORT_ANSWER"
+    ? (quiz?.timePerSaSeconds || quiz?.timePerItemSeconds || 60)
+    : (quiz?.timePerItemSeconds || 60);
   const gradableQuestions = questions.filter((q: any) => q.type !== "INSTRUCTION");
   const answeredCount = Object.keys(answers).filter(
     (k) =>
@@ -855,7 +871,7 @@ export default function ActiveExamRoomPage({
               <div className="flex-1 min-w-0 text-[11px] sm:text-xs leading-relaxed">
                 <strong className="text-amber-950 font-bold">Paced Exam Mode:</strong>{" "}
                 <span className="text-amber-800">
-                  {perItemDuration}s allotted per question. Past questions lock automatically when advancing.
+                  {currentItemDuration}s allotted for this {currentQuestion?.type === "MULTIPLE_CHOICE" ? "Multiple Choice" : currentQuestion?.type === "TRUE_FALSE" ? "True / False" : currentQuestion?.type === "SHORT_ANSWER" ? "Short Answer" : "item"}. Past questions lock automatically when advancing.
                 </span>
               </div>
             </div>

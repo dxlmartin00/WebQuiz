@@ -506,7 +506,12 @@ export default function QuizGradebookPage({
                       {s.status === "SUBMITTED" ? (
                         <span className="flat-badge-emerald font-bold">Submitted</span>
                       ) : s.status === "AUTO_SUBMITTED" ? (
-                        <span className="flat-badge-amber font-bold">Auto-Submitted</span>
+                        <span
+                          className="flat-badge-amber font-bold cursor-help"
+                          title="Auto-submitted upon timer expiration or quiz deadline lockout"
+                        >
+                          Auto-Submitted
+                        </span>
                       ) : s.status === "IN_PROGRESS" ? (
                         <span className="flat-badge-indigo inline-flex items-center gap-1.5 font-bold">
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />

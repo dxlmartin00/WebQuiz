@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
+import { isSubmissionExpired, finalizeExpiredSubmission } from "@/lib/auto-finalize";
 function seededShuffle<T>(array: T[], seedStr: string): T[] {
   let hash = 0;
   for (let i = 0; i < seedStr.length; i++) {
@@ -70,21 +71,8 @@ export async function POST(
     }
 
     const now = new Date();
-    if (quiz.deadlineAt && new Date(quiz.deadlineAt) < now) {
-      return NextResponse.json(
-        { error: "The deadline for this quiz has already passed." },
-        { status: 403 }
-      );
-    }
 
-    if (quiz.startAt && new Date(quiz.startAt) > now) {
-      return NextResponse.json(
-        { error: "This quiz is not open yet." },
-        { status: 403 }
-      );
-    }
-
-    // Check for existing submission
+    // Check for existing submission first
     let submission = await prisma.submission.findFirst({
       where: {
         quizId,
@@ -118,24 +106,40 @@ export async function POST(
         );
       }
 
-      // Check if startedAt expired while in progress (e.g., from old seed data or stale test)
-      const durationMs = quiz.durationMinutes * 60 * 1000;
-      const elapsed = Date.now() - new Date(submission.startedAt).getTime();
-
-      // If previous unsubmitted session started more than durationMs ago, reset startedAt to now so student has full time
-      if (elapsed >= durationMs) {
-        submission = await prisma.submission.update({
-          where: { id: submission.id },
-          data: {
-            startedAt: new Date(),
-            violationCount: 0,
+      // If in progress but time or deadline expired, auto-finalize immediately!
+      if (isSubmissionExpired(submission, quiz, now)) {
+        const finalized = await finalizeExpiredSubmission(submission, quiz.questions, now);
+        return NextResponse.json(
+          {
+            error: "Your exam time has expired or the deadline has passed.",
+            isSubmitted: true,
+            submission: {
+              id: finalized.id,
+              score: finalized.score,
+              totalPoints: finalized.totalPoints,
+              status: finalized.status,
+              submittedAt: finalized.submittedAt,
+            },
           },
-          include: {
-            answers: true,
-          },
-        });
+          { status: 400 }
+        );
       }
     } else {
+      // Brand new attempt: verify start time and closing deadline
+      if (quiz.startAt && new Date(quiz.startAt) > now) {
+        return NextResponse.json(
+          { error: "This quiz is not open yet." },
+          { status: 403 }
+        );
+      }
+
+      if (quiz.deadlineAt && new Date(quiz.deadlineAt) < now) {
+        return NextResponse.json(
+          { error: "The deadline for this quiz has already passed." },
+          { status: 403 }
+        );
+      }
+
       // Calculate total points (excluding instructional text cards)
       const totalPoints = quiz.questions.reduce(
         (sum, q) => sum + (q.type === "INSTRUCTION" ? 0 : q.points),
@@ -213,6 +217,9 @@ export async function POST(
         durationMinutes: quiz.durationMinutes,
         timerMode: quiz.timerMode,
         timePerItemSeconds: quiz.timePerItemSeconds,
+        timePerMcSeconds: quiz.timePerMcSeconds,
+        timePerTfSeconds: quiz.timePerTfSeconds,
+        timePerSaSeconds: quiz.timePerSaSeconds,
         maxViolations: quiz.maxViolations,
         totalQuestions: quiz.questions.length,
         totalPoints: submission.totalPoints,

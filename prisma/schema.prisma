@@ -63,6 +63,9 @@ model Quiz {
   durationMinutes    Int          @default(30)
   timerMode          String       @default("WHOLE_QUIZ") // "WHOLE_QUIZ" or "PER_ITEM"
   timePerItemSeconds Int?         @default(60)
+  timePerMcSeconds   Int?         @default(45)
+  timePerTfSeconds   Int?         @default(30)
+  timePerSaSeconds   Int?         @default(60)
   startAt            DateTime?
   deadlineAt       DateTime?
   maxViolations    Int          @default(3)
