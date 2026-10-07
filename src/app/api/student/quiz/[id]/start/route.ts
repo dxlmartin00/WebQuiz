@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
 import { isSubmissionExpired, finalizeExpiredSubmission } from "@/lib/auto-finalize";
+import { logSystemError } from "@/lib/logger";
 function seededShuffle<T>(array: T[], seedStr: string): T[] {
   let hash = 0;
   for (let i = 0; i < seedStr.length; i++) {
@@ -235,8 +236,15 @@ export async function POST(
       questions: processedQuestions,
       savedAnswers: savedAnswersMap,
     });
-  } catch (error) {
-    console.error("Start quiz error:", error);
+  } catch (error: any) {
+    const { id } = await params;
+    await logSystemError({
+      endpoint: `/api/student/quiz/${id}/start`,
+      method: "POST",
+      statusCode: 500,
+      error,
+      userRole: "STUDENT",
+    });
     return NextResponse.json(
       { error: "Failed to initialize quiz session" },
       { status: 500 }

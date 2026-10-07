@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logSystemError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -211,8 +212,15 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ quiz }, { status: 201 });
-  } catch (error) {
-    console.error("Create quiz error:", error);
+  } catch (error: any) {
+    await logSystemError({
+      endpoint: "/api/teacher/quizzes",
+      method: "POST",
+      statusCode: 500,
+      error,
+      userId: teacherId,
+      userRole: "TEACHER",
+    });
     return NextResponse.json({ error: "Failed to create quiz" }, { status: 500 });
   }
 }

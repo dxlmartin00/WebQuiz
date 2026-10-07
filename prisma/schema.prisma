@@ -161,3 +161,20 @@ model StudentSession {
   @@index([studentIdNumber])
   @@index([sessionToken])
 }
+
+model SystemErrorLog {
+  id           String   @id @default(cuid())
+  statusCode   Int      @default(500)
+  endpoint     String
+  method       String   @default("GET")
+  errorMessage String   @db.Text
+  stackTrace   String?  @db.Text
+  userId       String?
+  userRole     String?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([statusCode])
+  @@index([endpoint])
+}

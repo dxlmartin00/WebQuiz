@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
 import { evaluateAnswer } from "@/lib/grading";
+import { logSystemError } from "@/lib/logger";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let studentIdNumber: string | undefined;
   try {
     const session = await getStudentSession();
     if (!session) {
@@ -14,7 +16,8 @@ export async function POST(
     }
 
     const { id: quizId } = await params;
-    const { studentIdNumber, studentName } = session;
+    studentIdNumber = session.studentIdNumber;
+    const { studentName } = session;
     const body = await req.json();
     const { answers, isAutoSubmit } = body as {
       answers: Record<string, string>;
@@ -165,8 +168,16 @@ export async function POST(
       violationCount: updated.violationCount,
       breakdown: evaluationBreakdown,
     });
-  } catch (error) {
-    console.error("Submission grading error:", error);
+  } catch (error: any) {
+    const { id } = await params;
+    await logSystemError({
+      endpoint: `/api/student/quiz/${id}/submit`,
+      method: "POST",
+      statusCode: 500,
+      error,
+      userId: studentIdNumber,
+      userRole: "STUDENT",
+    });
     return NextResponse.json(
       { error: "Failed to grade and finalize submission" },
       { status: 500 }

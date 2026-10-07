@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/student-session";
+import { logSystemError } from "@/lib/logger";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let studentIdNumber: string | undefined;
   try {
     const session = await getStudentSession();
     if (!session) {
@@ -13,7 +15,7 @@ export async function POST(
     }
 
     const { id: quizId } = await params;
-    const { studentIdNumber } = session;
+    studentIdNumber = session.studentIdNumber;
     const body = await req.json();
     const { answers } = body as { answers: Record<string, string> };
 
@@ -67,8 +69,16 @@ export async function POST(
     );
 
     return NextResponse.json({ success: true, savedCount: entries.length });
-  } catch (error) {
-    console.error("Autosave error:", error);
+  } catch (error: any) {
+    const { id } = await params;
+    await logSystemError({
+      endpoint: `/api/student/quiz/${id}/save`,
+      method: "POST",
+      statusCode: 500,
+      error,
+      userId: studentIdNumber,
+      userRole: "STUDENT",
+    });
     return NextResponse.json({ error: "Autosave failed" }, { status: 500 });
   }
 }

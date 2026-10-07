@@ -10,6 +10,7 @@ import {
   FileQuestion,
   LogOut,
   ShieldCheck,
+  Activity,
   X,
 } from "lucide-react";
 import Logo from "@/components/ui/Logo";
@@ -149,6 +150,18 @@ export default function TeacherSidebar({
                     {pendingCount}
                   </span>
                 )}
+              </Link>
+
+              <Link
+                href="/teacher/admin/system"
+                className={`flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium transition-colors min-h-[44px] ${
+                  pathname.startsWith("/teacher/admin/system")
+                    ? "bg-amber-600 text-white border border-amber-500 font-semibold"
+                    : "text-amber-300/90 hover:bg-slate-800 hover:text-amber-200"
+                }`}
+              >
+                <Activity className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>System Health &amp; Logs</span>
               </Link>
             </div>
           )}

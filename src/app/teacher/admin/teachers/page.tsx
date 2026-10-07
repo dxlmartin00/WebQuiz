@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import {
   ShieldCheck,
   UserCheck,
@@ -13,6 +14,8 @@ import {
   Clock,
   BookOpen,
   RefreshCw,
+  Users,
+  Activity,
 } from "lucide-react";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -141,6 +144,24 @@ export default function AdminFacultyApprovalsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Admin Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-px">
+        <Link
+          href="/teacher/admin/teachers"
+          className="flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 border-slate-900 text-slate-900 bg-white transition-colors"
+        >
+          <Users className="w-4 h-4 text-amber-600" />
+          <span>Faculty Access &amp; Approvals</span>
+        </Link>
+        <Link
+          href="/teacher/admin/system"
+          className="flex items-center gap-2 py-2.5 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          <Activity className="w-4 h-4 text-slate-400" />
+          <span>System Health &amp; Logs</span>
+        </Link>
       </div>
 
       {/* Filter and Search Controls */}
