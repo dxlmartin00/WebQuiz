@@ -71,11 +71,11 @@ export async function GET(
         s.status = "AUTO_SUBMITTED";
         s.score = finalized.score;
         s.submittedAt = finalized.submittedAt;
-        const ansMap = new Map(finalized.evaluatedAnswers.map((a) => [a.questionId, a]));
+        const ansMap = new Map<string, any>(finalized.evaluatedAnswers.map((a: any) => [a.questionId, a]));
         s.answers = quiz.questions
           .filter((q) => q.type !== "INSTRUCTION")
           .map((q) => {
-            const ev = ansMap.get(q.id);
+            const ev: any = ansMap.get(q.id);
             return {
               id: `${s.id}_${q.id}`,
               submissionId: s.id,

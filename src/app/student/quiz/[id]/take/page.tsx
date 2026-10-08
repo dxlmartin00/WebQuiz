@@ -70,6 +70,7 @@ export default function ActiveExamRoomPage({
   const isModalOpenRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedAnswersRef = useRef<Record<string, string>>({});
 
   // Mobile virtual keyboard & viewport tracking
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -187,6 +188,7 @@ export default function ActiveExamRoomPage({
         } catch {}
 
         setAnswers(initialAnswers);
+        lastSavedAnswersRef.current = { ...initialAnswers };
 
         // Restore flagged questions
         try {
@@ -311,17 +313,26 @@ export default function ActiveExamRoomPage({
       const questions = data?.questions || [];
 
       if (currentIdx < questions.length - 1) {
-        // Flush current answer to server draft immediately
+        // Flush current answer to server draft only if modified and not yet saved
         const currQ = questions[currentIdx];
-        if (currQ && answers[currQ.id] !== undefined) {
+        if (
+          currQ &&
+          answers[currQ.id] !== undefined &&
+          lastSavedAnswersRef.current[currQ.id] !== answers[currQ.id]
+        ) {
           if (autosaveTimerRef.current) {
             clearTimeout(autosaveTimerRef.current);
           }
+          const qVal = answers[currQ.id];
           fetch(`/api/student/quiz/${id}/save`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ answers: { [currQ.id]: answers[currQ.id] } }),
-          }).catch(() => {});
+            body: JSON.stringify({ answers: { [currQ.id]: qVal } }),
+          })
+            .then((res) => {
+              if (res.ok) lastSavedAnswersRef.current[currQ.id] = qVal;
+            })
+            .catch(() => {});
         }
 
         const nextQ = questions[currentIdx + 1];
@@ -504,12 +515,17 @@ export default function ActiveExamRoomPage({
     if (navigator.onLine) {
       autosaveTimerRef.current = setTimeout(async () => {
         try {
-          await fetch(`/api/student/quiz/${id}/save`, {
+          const res = await fetch(`/api/student/quiz/${id}/save`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ answers: { [questionId]: value } }),
           });
-          setSaveStatus("saved");
+          if (res.ok) {
+            lastSavedAnswersRef.current[questionId] = value;
+            setSaveStatus("saved");
+          } else {
+            setSaveStatus("offline");
+          }
         } catch (e) {
           console.error("Autosave draft error:", e);
           setSaveStatus("offline");

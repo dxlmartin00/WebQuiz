@@ -107,36 +107,34 @@ export async function finalizeExpiredSubmission(
     });
   }
 
-  // Update submission status to AUTO_SUBMITTED
-  const updatedSubmission = await prisma.submission.update({
-    where: { id: submission.id },
-    data: {
-      status: "AUTO_SUBMITTED",
-      score: totalScore,
-      submittedAt: submittedAtDate,
-    },
-  });
+  // Atomically persist evaluated answers and update submission status in ONE single batch transaction
+  const txOps: any[] = [
+    prisma.submissionAnswer.deleteMany({
+      where: { submissionId: submission.id },
+    }),
+  ];
 
-  // Upsert all answer records with evaluated marks
-  await Promise.all(
-    answersToPersist.map((ans) =>
-      prisma.submissionAnswer.upsert({
-        where: {
-          submissionId_questionId: {
-            submissionId: ans.submissionId,
-            questionId: ans.questionId,
-          },
-        },
-        update: {
-          studentAnswer: ans.studentAnswer,
-          isCorrect: ans.isCorrect,
-          pointsAwarded: ans.pointsAwarded,
-          matchType: ans.matchType,
-        },
-        create: ans,
+  if (answersToPersist.length > 0) {
+    txOps.push(
+      prisma.submissionAnswer.createMany({
+        data: answersToPersist,
       })
-    )
+    );
+  }
+
+  txOps.push(
+    prisma.submission.update({
+      where: { id: submission.id },
+      data: {
+        status: "AUTO_SUBMITTED",
+        score: totalScore,
+        submittedAt: submittedAtDate,
+      },
+    })
   );
+
+  const txResults = await prisma.$transaction(txOps);
+  const updatedSubmission = txResults[txResults.length - 1];
 
   return {
     ...updatedSubmission,
