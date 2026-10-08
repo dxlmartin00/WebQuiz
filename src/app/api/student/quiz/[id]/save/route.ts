@@ -48,55 +48,69 @@ export async function POST(
     // can attempt to insert the same (submissionId, questionId) at the exact same millisecond.
     // If P2002 (Unique constraint failed) is caught, the competing thread already created the row,
     // so we safely update it without throwing a 500 error.
-    await Promise.all(
-      entries.map(async ([questionId, studentAnswer]) => {
-        const answerStr = String(studentAnswer ?? "");
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            await prisma.submissionAnswer.upsert({
-              where: {
-                submissionId_questionId: {
-                  submissionId: submission.id,
-                  questionId,
-                },
-              },
-              update: {
-                studentAnswer: answerStr,
-              },
-              create: {
+    const saveSingleAnswer = async (questionId: string, studentAnswer: string) => {
+      const answerStr = String(studentAnswer ?? "");
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await prisma.submissionAnswer.upsert({
+            where: {
+              submissionId_questionId: {
                 submissionId: submission.id,
                 questionId,
-                studentAnswer: answerStr,
-                isCorrect: false,
-                pointsAwarded: 0,
               },
-            });
-            return;
-          } catch (err: any) {
-            if (err?.code === "P2002") {
-              try {
-                await prisma.submissionAnswer.update({
-                  where: {
-                    submissionId_questionId: {
-                      submissionId: submission.id,
-                      questionId,
-                    },
+            },
+            update: {
+              studentAnswer: answerStr,
+            },
+            create: {
+              submissionId: submission.id,
+              questionId,
+              studentAnswer: answerStr,
+              isCorrect: false,
+              pointsAwarded: 0,
+            },
+          });
+          return;
+        } catch (err: any) {
+          if (err?.code === "P2002") {
+            try {
+              await prisma.submissionAnswer.update({
+                where: {
+                  submissionId_questionId: {
+                    submissionId: submission.id,
+                    questionId,
                   },
-                  data: {
-                    studentAnswer: answerStr,
-                  },
-                });
-                return;
-              } catch {
-                // If update fails on rare edge case, retry loop will attempt upsert once more
-              }
-            } else {
-              throw err;
+                },
+                data: {
+                  studentAnswer: answerStr,
+                },
+              });
+              return;
+            } catch {
+              // Retry loop
             }
+          } else {
+            throw err;
           }
         }
-      })
-    );
+      }
+    };
+
+    // For single answers (99% of typing/option clicks), run directly.
+    // For bulk reconnection drafts, chunk by 5 to prevent exhausting the database connection pool.
+    if (entries.length === 1) {
+      await saveSingleAnswer(entries[0][0], entries[0][1]);
+    } else {
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
+        const chunk = entries.slice(i, i + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(([questionId, studentAnswer]) =>
+            saveSingleAnswer(questionId, studentAnswer)
+          )
+        );
+      }
+    }
 
     return NextResponse.json({ success: true, savedCount: entries.length });
   } catch (error: any) {
