@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Filter,
   BarChart3,
+  Edit3,
 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastContext";
 import { ItemAnalysisView } from "@/components/teacher/ItemAnalysisView";
@@ -42,6 +43,41 @@ export default function QuizGradebookPage({
   const [resettingStudent, setResettingStudent] = useState<any | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState<"ROSTER" | "ITEM_ANALYSIS">("ROSTER");
+  const [editingScoreSubId, setEditingScoreSubId] = useState<string | null>(null);
+  const [manualScoreVal, setManualScoreVal] = useState<string>("");
+  const [savingScore, setSavingScore] = useState(false);
+
+  const handleSaveManualScore = async (submissionId: string) => {
+    const num = parseFloat(manualScoreVal);
+    if (isNaN(num) || num < 0) {
+      toast.error("Invalid Score", "Please enter a valid positive score.");
+      return;
+    }
+    try {
+      setSavingScore(true);
+      const res = await fetch(`/api/teacher/quizzes/${id}/submissions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId, score: num }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update score");
+      toast.success("Score Updated", "The student score was manually updated.");
+      setEditingScoreSubId(null);
+      if (selectedSubmission && selectedSubmission.id === submissionId) {
+        setSelectedSubmission({
+          ...selectedSubmission,
+          score: num,
+          percentage: (num / (selectedSubmission.totalPoints || 1)) * 100,
+        });
+      }
+      fetchGradebook(true);
+    } catch (err: any) {
+      toast.error("Update Failed", err.message);
+    } finally {
+      setSavingScore(false);
+    }
+  };
 
   const fetchGradebook = useCallback(
     async (isBackground = false) => {
@@ -522,7 +558,57 @@ export default function QuizGradebookPage({
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                      {s.hasSubmitted ? `${s.score} / ${s.totalPoints}` : "-"}
+                      {s.hasSubmitted ? (
+                        editingScoreSubId === s.id ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              max={s.totalPoints}
+                              value={manualScoreVal}
+                              onChange={(e) => setManualScoreVal(e.target.value)}
+                              className="w-14 px-1 py-0.5 text-xs border border-indigo-400 font-mono text-slate-900 focus:outline-none"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              disabled={savingScore}
+                              onClick={() => handleSaveManualScore(s.id)}
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+                              title="Save Score"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingScoreSubId(null)}
+                              className="px-1 py-0.5 text-[10px] text-slate-400 hover:text-slate-700"
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 group">
+                            <span>{s.score} / {s.totalPoints}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingScoreSubId(s.id);
+                                setManualScoreVal(String(s.score));
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-indigo-600 transition-opacity"
+                              title="Edit Score"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono font-semibold">
                       {s.hasSubmitted ? `${s.percentage.toFixed(1)}%` : "-"}
@@ -598,8 +684,51 @@ export default function QuizGradebookPage({
                     {selectedSubmission.studentName}
                   </h3>
                 </div>
-                <div className="text-xs text-slate-500 mt-1 flex items-center gap-3">
-                  <span>Score: <b className="text-slate-900">{selectedSubmission.score} / {selectedSubmission.totalPoints}</b> ({selectedSubmission.percentage.toFixed(1)}%)</span>
+                <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span>Score: <b className="text-slate-900">{selectedSubmission.score} / {selectedSubmission.totalPoints}</b> ({selectedSubmission.percentage.toFixed(1)}%)</span>
+                    {editingScoreSubId === selectedSubmission.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max={selectedSubmission.totalPoints}
+                          value={manualScoreVal}
+                          onChange={(e) => setManualScoreVal(e.target.value)}
+                          className="w-16 px-1.5 py-0.5 text-xs border border-indigo-400 font-mono text-slate-900 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          disabled={savingScore}
+                          onClick={() => handleSaveManualScore(selectedSubmission.id)}
+                          className="px-2 py-0.5 text-[11px] font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+                        >
+                          {savingScore ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingScoreSubId(null)}
+                          className="px-1 py-0.5 text-[11px] text-slate-500 hover:text-slate-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingScoreSubId(selectedSubmission.id);
+                          setManualScoreVal(String(selectedSubmission.score));
+                        }}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-0.5"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Edit Score</span>
+                      </button>
+                    )}
+                  </div>
                   <span>&bull;</span>
                   <span>Violations: <b className="text-rose-600">{selectedSubmission.violationCount}</b></span>
                 </div>

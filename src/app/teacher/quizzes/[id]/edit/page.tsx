@@ -154,6 +154,7 @@ export default function EditQuizPage({
           shuffleQuestions: q.shuffleQuestions,
           shuffleChoices: q.shuffleChoices,
           questions: q.questions.map((item: any) => ({
+            id: item.id,
             type: item.type,
             prompt: item.prompt,
             points: item.points,
@@ -189,7 +190,14 @@ export default function EditQuizPage({
               setIsPublished(draft.isPublished ?? serverSnapshot.isPublished);
               setShuffleQuestions(draft.shuffleQuestions ?? serverSnapshot.shuffleQuestions);
               setShuffleChoices(draft.shuffleChoices ?? serverSnapshot.shuffleChoices);
-              setQuestions(draft.questions ?? serverSnapshot.questions);
+              const draftQuestions = draft.questions ?? serverSnapshot.questions;
+              const mergedQuestions = Array.isArray(draftQuestions)
+                ? draftQuestions.map((dq: any, idx: number) => ({
+                    ...dq,
+                    id: dq.id || serverSnapshot.questions[idx]?.id,
+                  }))
+                : serverSnapshot.questions;
+              setQuestions(mergedQuestions);
 
               if (draft.savedAt) {
                 setRestoredTime(draft.savedAt);

@@ -252,3 +252,71 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to reset student attempt" }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { email },
+  });
+
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
+  const { id: quizId } = await params;
+
+  const quiz = await prisma.quiz.findFirst({
+    where: isUserAdmin
+      ? { id: quizId }
+      : { id: quizId, subject: { teacherId: teacher.id } },
+  });
+
+  if (!quiz) {
+    return NextResponse.json({ error: "Quiz not found or unauthorized" }, { status: 404 });
+  }
+
+  try {
+    const body = await req.json();
+    const { submissionId, score, status } = body;
+
+    if (!submissionId) {
+      return NextResponse.json({ error: "submissionId is required" }, { status: 400 });
+    }
+
+    const submission = await prisma.submission.findFirst({
+      where: { id: submissionId, quizId },
+    });
+
+    if (!submission) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        score: score !== undefined ? Math.max(0, Number(score)) : submission.score,
+        status: status || submission.status,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Student score updated successfully.",
+      submission: updated,
+    });
+  } catch (error: any) {
+    console.error("Update submission score error:", error);
+    return NextResponse.json({ error: error.message || "Failed to update submission" }, { status: 500 });
+  }
+}

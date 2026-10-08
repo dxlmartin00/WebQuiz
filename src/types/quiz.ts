@@ -1,4 +1,5 @@
 export interface QuestionDraft {
+  id?: string;
   type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "INSTRUCTION";
   prompt: string;
   points: number;

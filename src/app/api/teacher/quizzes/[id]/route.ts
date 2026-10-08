@@ -172,9 +172,14 @@ export async function PUT(
           orderIndex,
         };
 
-        if (q.id && existingMap.has(q.id)) {
-          retainedIds.add(q.id);
-          const eq = existingMap.get(q.id)!;
+        let targetId = q.id;
+        if (!targetId && existingQuestions[i] && !retainedIds.has(existingQuestions[i].id)) {
+          targetId = existingQuestions[i].id;
+        }
+
+        if (targetId && existingMap.has(targetId)) {
+          retainedIds.add(targetId);
+          const eq = existingMap.get(targetId)!;
 
           // Check if grading parameters changed
           const gradingChanged =
@@ -197,7 +202,7 @@ export async function PUT(
             eq.orderIndex !== orderIndex;
 
           if (anyFieldChanged) {
-            questionsToUpdate.push({ id: q.id, data: questionData });
+            questionsToUpdate.push({ id: targetId, data: questionData });
           }
         } else {
           // New question added
@@ -240,11 +245,30 @@ export async function PUT(
         });
       }
 
-      // 5. Delete removed questions in a single query
+      // 5. Delete removed questions in a single query, preserving any questions that have student answers to prevent cascade deletion
       if (removedQuestionIds.length > 0) {
-        await prisma.question.deleteMany({
-          where: { id: { in: removedQuestionIds } },
+        const answersForRemoved = await prisma.submissionAnswer.findMany({
+          where: { questionId: { in: removedQuestionIds } },
+          select: { questionId: true },
+          distinct: ["questionId"],
         });
+        const questionsWithAnswers = new Set(answersForRemoved.map((a) => a.questionId));
+        const safeToDeleteIds = removedQuestionIds.filter((qid) => !questionsWithAnswers.has(qid));
+        const preserveQuestionIds = removedQuestionIds.filter((qid) => questionsWithAnswers.has(qid));
+
+        if (safeToDeleteIds.length > 0) {
+          await prisma.question.deleteMany({
+            where: { id: { in: safeToDeleteIds } },
+          });
+        }
+
+        // Questions with student answers are preserved (orderIndex: -999) so past student answers and grades are NEVER lost
+        if (preserveQuestionIds.length > 0) {
+          await prisma.question.updateMany({
+            where: { id: { in: preserveQuestionIds } },
+            data: { orderIndex: -999 },
+          });
+        }
       }
 
       // 6. Submission Re-scoring: ONLY run if grading rules, points, or questions actually changed!
@@ -275,6 +299,7 @@ export async function PUT(
 
           for (const sub of completedSubmissions) {
             let newScore = 0;
+            let evaluatedCount = 0;
             const answerMap = new Map(sub.answers.map((a) => [a.questionId, a]));
 
             for (const q of freshQuestions) {
@@ -282,6 +307,7 @@ export async function PUT(
 
               const existingAns = answerMap.get(q.id);
               if (existingAns) {
+                evaluatedCount++;
                 let correctAnswers: string[] = [];
                 try {
                   correctAnswers = JSON.parse(q.correctAnswers);
@@ -316,12 +342,16 @@ export async function PUT(
               }
             }
 
-            if (sub.score !== newScore || sub.totalPoints !== freshTotalPoints) {
-              submissionUpdates.push({
-                id: sub.id,
-                score: newScore,
-                totalPoints: freshTotalPoints,
-              });
+            // CRITICAL: Only overwrite score if the student actually had answers to evaluate.
+            // If evaluatedCount is 0, preserve their existing score so grades are never wiped.
+            if (evaluatedCount > 0) {
+              if (sub.score !== newScore || sub.totalPoints !== freshTotalPoints) {
+                submissionUpdates.push({
+                  id: sub.id,
+                  score: newScore,
+                  totalPoints: freshTotalPoints,
+                });
+              }
             }
           }
 
