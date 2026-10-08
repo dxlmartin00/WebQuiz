@@ -137,6 +137,7 @@ export async function POST(
       txOperations.push(
         prisma.submissionAnswer.createMany({
           data: answersToPersist,
+          skipDuplicates: true,
         })
       );
     }

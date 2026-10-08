@@ -118,6 +118,7 @@ export async function finalizeExpiredSubmission(
     txOps.push(
       prisma.submissionAnswer.createMany({
         data: answersToPersist,
+        skipDuplicates: true,
       })
     );
   }
