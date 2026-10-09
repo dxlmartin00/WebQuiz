@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastContext";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import SystemTelemetryCharts from "@/components/teacher/SystemTelemetryCharts";
 
 export default function AdminSystemMonitorPage() {
   const toast = useToast();
@@ -29,6 +30,7 @@ export default function AdminSystemMonitorPage() {
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
 
   // Filter & Selected error for modal
   const [errorFilter, setErrorFilter] = useState<"ALL" | "500" | "CLIENT">("ALL");
@@ -50,6 +52,13 @@ export default function AdminSystemMonitorPage() {
       const json = await res.json();
       setData(json);
       setLastRefreshed(new Date());
+
+      if (typeof json?.health?.dbLatencyMs === "number") {
+        setLatencyHistory((prev) => {
+          const updated = [...prev, json.health.dbLatencyMs];
+          return updated.slice(-10); // Keep last 10 samples
+        });
+      }
     } catch (err: any) {
       setError(err.message);
       if (!silent) toast.error("Diagnostics Error", err.message);
@@ -302,6 +311,19 @@ export default function AdminSystemMonitorPage() {
               </div>
             </div>
           )}
+
+          {/* Visual Telemetry Graphs */}
+          <SystemTelemetryCharts
+            hourlyBuckets={data?.timeline?.hourly || []}
+            dbLatencyMs={data?.health?.dbLatencyMs || 0}
+            dbStatus={data?.health?.status || "CONNECTED"}
+            latencyHistory={latencyHistory}
+            topEndpoints={data?.errors?.topEndpoints || []}
+            activeRooms={data?.traffic?.activeRooms || []}
+            totalSubmissions24h={data?.traffic?.submissions24h || 0}
+            totalErrors24h={data?.errors?.errors24h || 0}
+            serverErrors24h={data?.errors?.serverErrors24h || 0}
+          />
 
           {/* Error & Exception Log Section */}
           <div className="space-y-4">

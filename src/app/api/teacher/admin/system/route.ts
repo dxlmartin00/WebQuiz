@@ -123,7 +123,90 @@ export async function GET() {
         take: 100,
         orderBy: { createdAt: "desc" },
       }),
+      // Hourly submissions in last 24h
+      prisma.submission.findMany({
+        where: {
+          submittedAt: { gte: oneDayAgo },
+          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+        },
+        select: { submittedAt: true },
+      }),
+      // Hourly errors in last 24h
+      prisma.systemErrorLog.findMany({
+        where: { createdAt: { gte: oneDayAgo } },
+        select: { createdAt: true, statusCode: true, endpoint: true },
+      }),
     ]);
+
+    // Build 24 hourly buckets (from 23 hours ago up to current hour)
+    const hourlyBuckets: {
+      hourLabel: string;
+      hourKey: string;
+      submissions: number;
+      serverErrors: number;
+      clientErrors: number;
+    }[] = [];
+
+    const bucketMap = new Map<string, { submissions: number; serverErrors: number; clientErrors: number }>();
+
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 60 * 60 * 1000);
+      const hourKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}`;
+      const hourLabel = `${String(d.getHours()).padStart(2, "0")}:00`;
+      bucketMap.set(hourKey, { submissions: 0, serverErrors: 0, clientErrors: 0 });
+      hourlyBuckets.push({ hourLabel, hourKey, submissions: 0, serverErrors: 0, clientErrors: 0 });
+    }
+
+    for (const sub of recentSubmissions24h) {
+      if (!sub.submittedAt) continue;
+      const d = new Date(sub.submittedAt);
+      const hourKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}`;
+      const bucket = bucketMap.get(hourKey);
+      if (bucket) bucket.submissions++;
+    }
+
+    const endpointErrorCounts = new Map<string, { total: number; s500: number; s4xx: number }>();
+    let errorsIn24hCount = 0;
+    let s500In24hCount = 0;
+
+    for (const err of recentErrors24h) {
+      errorsIn24hCount++;
+      const is500 = err.statusCode >= 500;
+      if (is500) s500In24hCount++;
+
+      const d = new Date(err.createdAt);
+      const hourKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}`;
+      const bucket = bucketMap.get(hourKey);
+      if (bucket) {
+        if (is500) bucket.serverErrors++;
+        else bucket.clientErrors++;
+      }
+
+      const ep = err.endpoint || "Unknown";
+      const epData = endpointErrorCounts.get(ep) || { total: 0, s500: 0, s4xx: 0 };
+      epData.total++;
+      if (is500) epData.s500++;
+      else epData.s4xx++;
+      endpointErrorCounts.set(ep, epData);
+    }
+
+    for (const b of hourlyBuckets) {
+      const data = bucketMap.get(b.hourKey);
+      if (data) {
+        b.submissions = data.submissions;
+        b.serverErrors = data.serverErrors;
+        b.clientErrors = data.clientErrors;
+      }
+    }
+
+    // Top 5 error endpoints
+    const topErrorEndpoints = Array.from(endpointErrorCounts.entries())
+      .map(([endpoint, counts]) => ({
+        endpoint,
+        ...counts,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
 
     return NextResponse.json({
       timestamp: now.toISOString(),
@@ -143,7 +226,13 @@ export async function GET() {
       errors: {
         totalErrors: totalErrorsCount,
         serverErrors500: serverErrors500Count,
+        errors24h: errorsIn24hCount,
+        serverErrors24h: s500In24hCount,
         recentLogs: recentErrorLogs,
+        topEndpoints: topErrorEndpoints,
+      },
+      timeline: {
+        hourly: hourlyBuckets,
       },
     });
   } catch (error: any) {
