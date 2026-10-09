@@ -92,6 +92,8 @@ export async function GET() {
       totalErrorsCount,
       serverErrors500Count,
       recentErrorLogs,
+      recentSubmissions24h,
+      recentErrors24h,
     ] = await Promise.all([
       prisma.submission.count({
         where: {
