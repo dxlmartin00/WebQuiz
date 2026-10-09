@@ -95,14 +95,14 @@ export default function SystemTelemetryCharts({
 
       {/* TOP ROW: Dual Primary Visual Graphs */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* GRAPH 1: 24-Hour Exam Traffic & Submissions Volume (Spans 2 columns) */}
+        {/* GRAPH 1: 24-Hour Exam Traffic & Submissions Volume (Line Chart) */}
         <div className="lg:col-span-2 flat-card bg-white p-5 border border-slate-200 flex flex-col justify-between">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-indigo-600" />
+                <TrendingUp className="w-4 h-4 text-indigo-600" />
                 <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                  Hourly Submissions Volume (Last 24 Hours)
+                  Hourly Submissions Trend (Last 24 Hours)
                 </h3>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
@@ -117,12 +117,12 @@ export default function SystemTelemetryCharts({
                   <strong>{hoveredHour.hourLabel}</strong>: {hoveredHour.submissions} submission{hoveredHour.submissions === 1 ? "" : "s"}
                 </div>
               ) : (
-                <span className="text-[11px] text-slate-400 font-mono">Hover bar for details</span>
+                <span className="text-[11px] text-slate-400 font-mono">Hover points for details</span>
               )}
             </div>
           </div>
 
-          {/* SVG Bar Chart for Submissions */}
+          {/* SVG Line / Area Chart for Submissions */}
           <div className="pt-4 pb-1">
             <div className="relative h-44 w-full">
               {/* Background gridlines */}
@@ -138,50 +138,121 @@ export default function SystemTelemetryCharts({
                 </div>
               </div>
 
-              {/* Bars container */}
-              <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pt-4 pb-5 px-1">
-                {hourlyBuckets.map((bucket, idx) => {
-                  const heightPercent = maxSubmissions > 0 ? (bucket.submissions / maxSubmissions) * 100 : 0;
-                  const isHovered = hoveredHourIdx === idx;
-                  const isCurrent = idx === hourlyBuckets.length - 1;
+              {/* Responsive SVG Line Chart */}
+              {(() => {
+                const chartWidth = 500;
+                const chartHeight = 130;
+                const count = hourlyBuckets.length;
+                const points = hourlyBuckets.map((b, idx) => {
+                  const x = count > 1 ? (idx / (count - 1)) * chartWidth : chartWidth / 2;
+                  const y = maxSubmissions > 0
+                    ? chartHeight - (b.submissions / maxSubmissions) * (chartHeight - 16) - 8
+                    : chartHeight - 8;
+                  return { x, y, bucket: b, idx };
+                });
 
-                  return (
-                    <div
-                      key={bucket.hourKey}
-                      className="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer"
-                      onMouseEnter={() => {
-                        setHoveredHour(bucket);
-                        setHoveredHourIdx(idx);
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredHour(null);
-                        setHoveredHourIdx(null);
-                      }}
+                const polylinePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+                const areaPath = points.length > 0
+                  ? `M 0,${chartHeight} L ${points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L ")} L ${chartWidth},${chartHeight} Z`
+                  : "";
+
+                return (
+                  <div className="absolute inset-0 pt-2 pb-6 px-1">
+                    <svg
+                      viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                      preserveAspectRatio="none"
+                      className="w-full h-full overflow-visible"
                     >
-                      {/* Active tooltip badge on hover */}
-                      {isHovered && (
-                        <div className="absolute -top-7 z-20 bg-slate-900 text-white font-mono text-[10px] px-1.5 py-0.5 shadow-md whitespace-nowrap">
-                          {bucket.submissions} subs
-                        </div>
+                      <defs>
+                        <linearGradient id="submissionsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.28" />
+                          <stop offset="100%" stopColor="#4f46e5" stopOpacity="0.01" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Filled area gradient under the curve */}
+                      {areaPath && (
+                        <path
+                          d={areaPath}
+                          fill="url(#submissionsAreaGrad)"
+                          className="transition-all duration-300"
+                        />
                       )}
 
-                      {/* Bar fill */}
-                      <div
-                        style={{ height: `${Math.max(4, heightPercent)}%` }}
-                        className={`w-full transition-all duration-200 ${
-                          bucket.submissions > 0
-                            ? isHovered
-                              ? "bg-indigo-700 ring-2 ring-indigo-400"
-                              : isCurrent
-                              ? "bg-indigo-600"
-                              : "bg-indigo-500/85 hover:bg-indigo-600"
-                            : "bg-slate-100 hover:bg-slate-200"
-                        }`}
+                      {/* Main trend line */}
+                      <polyline
+                        fill="none"
+                        stroke="#4f46e5"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={polylinePoints}
                       />
-                    </div>
-                  );
-                })}
-              </div>
+
+                      {/* Interactive hover crosshair vertical guide */}
+                      {hoveredHourIdx !== null && points[hoveredHourIdx] && (
+                        <line
+                          x1={points[hoveredHourIdx].x}
+                          y1="0"
+                          x2={points[hoveredHourIdx].x}
+                          y2={chartHeight}
+                          stroke="#6366f1"
+                          strokeWidth="1.5"
+                          strokeDasharray="3 3"
+                        />
+                      )}
+
+                      {/* Points along the line */}
+                      {points.map((p) => {
+                        const isHovered = hoveredHourIdx === p.idx;
+                        const isCurrent = p.idx === count - 1;
+                        const hasSubmissions = p.bucket.submissions > 0;
+
+                        return (
+                          <g key={p.bucket.hourKey}>
+                            {/* Visual circle dot */}
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r={isHovered ? 5.5 : hasSubmissions || isCurrent ? 3.5 : 2}
+                              fill={
+                                isHovered
+                                  ? "#4338ca"
+                                  : isCurrent
+                                  ? "#4f46e5"
+                                  : hasSubmissions
+                                  ? "#6366f1"
+                                  : "#cbd5e1"
+                              }
+                              stroke="#ffffff"
+                              strokeWidth={isHovered ? 2 : 1.5}
+                              className="transition-all duration-150"
+                            />
+
+                            {/* Transparent wider hit-target for effortless hovering */}
+                            <rect
+                              x={Math.max(0, p.x - chartWidth / (count * 2))}
+                              y="0"
+                              width={chartWidth / count}
+                              height={chartHeight}
+                              fill="transparent"
+                              className="cursor-pointer"
+                              onMouseEnter={() => {
+                                setHoveredHour(p.bucket);
+                                setHoveredHourIdx(p.idx);
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredHour(null);
+                                setHoveredHourIdx(null);
+                              }}
+                            />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
 
               {/* X-axis labels */}
               <div className="absolute bottom-0 inset-x-0 flex justify-between text-[10px] font-mono text-slate-400 px-1 pt-1">
@@ -194,8 +265,8 @@ export default function SystemTelemetryCharts({
 
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5 font-mono">
-              <span className="w-2.5 h-2.5 bg-indigo-600 inline-block" />
-              <span>Normal Completed Exams</span>
+              <span className="w-2.5 h-0.5 bg-indigo-600 inline-block" />
+              <span>Hourly Submissions Curve</span>
             </span>
             <span className="font-mono text-slate-400">Values update on each telemetry ping</span>
           </div>
