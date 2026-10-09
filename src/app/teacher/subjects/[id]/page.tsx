@@ -17,6 +17,9 @@ import {
   Search,
   RefreshCw,
   Copy,
+  Edit2,
+  Check,
+  X,
 } from "lucide-react";
 import ClassListImportModal from "@/components/teacher/ClassListImportModal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -54,6 +57,11 @@ export default function SubjectDetailPage({
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Edit student name state
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchSubject = async () => {
     try {
@@ -144,6 +152,50 @@ export default function SubjectDetailPage({
       toast.error("Removal Error", e.message);
     } finally {
       setRemovingStudent(false);
+    }
+  };
+
+  const handleStartEdit = (e: { studentIdNumber: string; studentName: string }) => {
+    setEditingStudentId(e.studentIdNumber);
+    setEditingNameValue(e.studentName);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStudentId(null);
+    setEditingNameValue("");
+  };
+
+  const handleSaveEditStudentName = async (studentIdNumber: string) => {
+    const trimmed = editingNameValue.trim();
+    if (!trimmed) {
+      toast.error("Validation Error", "Student name cannot be empty.");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/teacher/subjects/${id}/roster`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentIdNumber,
+          studentName: trimmed,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update student name");
+      }
+
+      toast.success("Name Updated", `Student name updated to "${trimmed}".`);
+      setEditingStudentId(null);
+      setEditingNameValue("");
+      fetchSubject();
+    } catch (e: any) {
+      toast.error("Update Error", e.message);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -307,34 +359,100 @@ export default function SubjectDetailPage({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                    {filteredEnrollments.map((e: any, idx: number) => (
-                      <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="px-4 py-2.5 text-slate-400 font-sans">{idx + 1}</td>
-                        <td className="px-4 py-2.5 font-bold text-indigo-700">
-                          <CopyButton text={e.studentIdNumber} />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-900 font-sans font-medium">
-                          {e.studentName}
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-400 font-sans">
-                          {new Date(e.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-sans">
-                          <button
-                            onClick={() =>
-                              setStudentToDelete({
-                                idNumber: e.studentIdNumber,
-                                name: e.studentName,
-                              })
-                            }
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                            title="Remove student"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredEnrollments.map((e: any, idx: number) => {
+                      const isEditing = editingStudentId === e.studentIdNumber;
+                      return (
+                        <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-4 py-2.5 text-slate-400 font-sans">{idx + 1}</td>
+                          <td className="px-4 py-2.5 font-bold text-indigo-700">
+                            <CopyButton text={e.studentIdNumber} />
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-900 font-sans font-medium">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={editingNameValue}
+                                  onChange={(ev) => setEditingNameValue(ev.target.value)}
+                                  onKeyDown={(ev) => {
+                                    if (ev.key === "Enter") {
+                                      ev.preventDefault();
+                                      handleSaveEditStudentName(e.studentIdNumber);
+                                    } else if (ev.key === "Escape") {
+                                      handleCancelEdit();
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={savingEdit}
+                                  className="flat-input text-xs py-1 px-2 w-full max-w-xs font-sans"
+                                  placeholder="Full Name"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditStudentName(e.studentIdNumber)}
+                                  disabled={savingEdit}
+                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded border border-emerald-200 transition-colors"
+                                  title="Save name (Enter)"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEdit}
+                                  disabled={savingEdit}
+                                  className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-slate-200 transition-colors"
+                                  title="Cancel (Esc)"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between group/name pr-2">
+                                <span>{e.studentName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(e)}
+                                  className="opacity-0 group-hover/name:opacity-100 text-slate-400 hover:text-indigo-600 p-1 transition-all"
+                                  title="Edit student name"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-400 font-sans">
+                            {new Date(e.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-sans">
+                            <div className="flex items-center justify-end gap-1">
+                              {!isEditing && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(e)}
+                                  className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                                  title="Edit name"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStudentToDelete({
+                                    idNumber: e.studentIdNumber,
+                                    name: e.studentName,
+                                  })
+                                }
+                                className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                title="Remove student"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

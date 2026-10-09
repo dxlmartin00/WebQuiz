@@ -164,7 +164,7 @@ export default function TeacherSubjectsPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search by subject code or title..."
+            placeholder="Search by year & section or title..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flat-input text-xs pl-9 py-2 w-full"
@@ -286,11 +286,11 @@ export default function TeacherSubjectsPage() {
             <form onSubmit={handleCreateSubject} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Subject Code *
+                  Year & Section *
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., CS101, IT202-BSIT3A"
+                  placeholder="e.g., BSIT 3A, CS101, BSED-ENG 2B"
                   value={subjectCode}
                   onChange={(e) => setSubjectCode(e.target.value.toUpperCase())}
                   required

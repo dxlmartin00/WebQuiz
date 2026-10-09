@@ -185,3 +185,93 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to remove student" }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const email = session.user.email.toLowerCase().trim();
+  const isAdmin = isSystemAdmin(email);
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { email },
+  });
+
+  if (!teacher || (!teacher.isApproved && !isAdmin)) {
+    return NextResponse.json({ error: "Unauthorized or pending approval" }, { status: 403 });
+  }
+
+  const isUserAdmin = isAdmin || teacher.role === "ADMIN";
+  const { id: subjectId } = await params;
+
+  // Strict ownership check (Admins can manage any subject)
+  const subject = await prisma.subject.findFirst({
+    where: isUserAdmin ? { id: subjectId } : { id: subjectId, teacherId: teacher.id },
+  });
+
+  if (!subject) {
+    return NextResponse.json({ error: "Subject not found or unauthorized" }, { status: 404 });
+  }
+
+  try {
+    const body = await req.json();
+    const studentIdNumber = (body.studentIdNumber || "").trim().toUpperCase();
+    const studentName = (body.studentName || "").trim();
+
+    if (!studentIdNumber || !studentName) {
+      return NextResponse.json(
+        { error: "studentIdNumber and studentName are required" },
+        { status: 400 }
+      );
+    }
+
+    // 1. Update the Enrollment record for this subject
+    const updatedEnrollment = await prisma.enrollment.update({
+      where: {
+        subjectId_studentIdNumber: {
+          subjectId,
+          studentIdNumber,
+        },
+      },
+      data: {
+        studentName,
+      },
+    });
+
+    // 2. Sync to active StudentSession if present so session reflection is immediate
+    await prisma.studentSession.updateMany({
+      where: { studentIdNumber },
+      data: { studentName },
+    });
+
+    // 3. Sync to any past Submissions under quizzes of this subject
+    await prisma.submission.updateMany({
+      where: {
+        studentIdNumber,
+        quiz: {
+          subjectId,
+        },
+      },
+      data: {
+        studentName,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      enrollment: updatedEnrollment,
+    });
+  } catch (error: any) {
+    console.error("Update student name error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to update student name" },
+      { status: 500 }
+    );
+  }
+}
+
